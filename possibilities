@@ -1,0 +1,37 @@
+TITLE: Computational Analysis of Personality
+
+SUGESTED: YES
+
+GROUP: Graphics & Interaction Group
+
+DESCRIPTION:
+
+Individuals’ interactions with others are shaped by their personalities and their impressions regarding others' behaviours and personalities. Automatic personality analysis from nonverbal behaviours has therefore an impact on improving humans' interaction experience with socially intelligent systems including humanoid robots. There is already a significant body of work focusing on personality analysis from video and audio data modalities. This project aims to explore other data modalities such as bio-signals and novel multimodal fusion methods in a dyadic interaction scenario.
+
+-----------------------------------------------------------------------------
+TITLE: Programming style exploration
+
+SUGESTED: YES
+
+GROUP: Artificial Intelligence (Pietro Lio)
+
+DESCRIPTION:
+
+Tools like lint and style checkers can be used to check code against manually curated, strict style rules, like spacing style, but when a human reads code to assess quality we tend to also look for subtler and more context specific cues, such as function size and variable descriptiveness.
+
+This project is about using a machine learning approach to explore these properties of code. The starting point would be to extract a set of simple features, explore their relationships and try to predict metadata like author and date of writing, before either generalizing to more languages or developing more in depth features and more specific hints and advice.
+
+My suggested approach would be R both for evaluation and as a dataset since it has easily accessible source code and is good for statistics, but there are many reasonable approaches.
+
+POSSIBLE PROBLEMS: It has in part already been done
+
+------------------------------------------------------------------------------
+TITLE: Toward self-learning robots
+
+SUGESTED: YES
+
+GROUP: Artificial Intelligence (Mateja Jamnik)
+
+As robots are used more and more in domestic and social settings, their ability to effectively interact with humans becomes much more relevant. Emotions as an essential component in interaction with humans are already considered in so called “social robots”. Affective loop is an interactive process through which a social robots reacts (e.g. using colours) to human emotions (e.g. happiness, anger) expressed using physical (facial and/or body) gestures. The aim of this project is to serve as the basis of improving the affective loop so that the robots can react to human’s emotions appropriately as frequently as possible. The first step toward this is to recognise cases in which the robots reaction is perceived as appropriate/inappropriate by the user. This will then form a foundation of a learning algorithms that allows robot to improve its reaction to humans emotions.
+
+-------------------------------------------------------------------------------

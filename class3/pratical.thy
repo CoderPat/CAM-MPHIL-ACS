@@ -58,19 +58,26 @@ lemma
   apply(erule allE[where x=x])
   apply(case_tac x)
    apply(erule impE) back back
-    prefer 2
-    appl
+    apply(simp)
+   apply(assumption)
+  apply(erule impE) back
+  apply(simp)
+    apply(assumption)
   
 lemma
   shows "(\<forall>P Q. \<exists>!x. P x \<or> Q x) \<longrightarrow> False"
-  apply(rule impI)
-  apply(erule allE, erule allE[where x="Q"], erule ex1E)
-lemma
-  shows "\<exists>P. \<forall>x. \<not> P x"
-  sorry
     
 lemma
+  shows "\<exists>P. \<forall>x. \<not> P x"
+                  
+lemma
   shows "(\<forall>x. P x \<longrightarrow> Q x) \<longleftrightarrow> (\<forall>x. \<not> P x \<or> Q x)"
-  sorry
+  apply(rule iffI)
+   apply(rule allI, erule_tac x=x in allE)
+  apply(case_tac "P x")
+    apply(erule impE, assumption, rule disjI2, assumption)
+   apply(rule disjI1, assumption)
+  apply(rule allI, erule_tac x=x in allE)
+    apply(rule impI, erule disjE, erule notE, assumption+)
     
 end

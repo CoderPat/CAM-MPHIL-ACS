@@ -1,4 +1,4 @@
-theory Rules_Of_The_Propositional_Game
+theory theory_file
   imports Main
 begin
 

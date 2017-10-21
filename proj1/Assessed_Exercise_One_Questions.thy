@@ -158,7 +158,9 @@ prove below may fail to hold should you get the implementation wrong initially, 
 come back and re-examine your implementation later.  You can also use the examples in
 Section~\ref{sect.example.parse} to test whether your definition is reasonable.\<close>
   
-consts bind :: "('a, 'b) parser \<Rightarrow> ('b \<Rightarrow> ('a, 'c) parser) \<Rightarrow> ('a, 'c) parser"
+definition bind :: "('a, 'b) parser \<Rightarrow> ('b \<Rightarrow> ('a, 'c) parser) \<Rightarrow> ('a, 'c) parser" where
+  "bind p f \<equiv> Parser (\<lambda>xs. \<Union> ( (\<lambda>(ys, b). run (f b) ys) ` (run p xs) ))"
+  
   
 text\<open>Now that we have a notion of sequencing together two parsers to produce a new parser, we can
 define a combinator that iteratively applies a parser a fixed number of times in sequence---call it
@@ -179,7 +181,10 @@ the function to guide you in its definition.  Some of the properties that you wi
 may fail to hold should you get the implementation wrong initially, so you may need to come back and
 re-examine your implementation later.\<close>
   
-consts biter :: "nat \<Rightarrow> ('a, 'b) parser \<Rightarrow> ('a, 'b list) parser"
+fun biter :: "nat \<Rightarrow> ('a, 'b) parser \<Rightarrow> ('a, 'b list) parser" where
+  "biter 0 p = succeed []" |
+  "biter (Suc m) p = bind p (\<lambda>b. Parser (\<lambda>xs. (\<lambda>(ys, bs). (ys, b#bs)) ` (run (biter m p) xs)))"
+
 
 text\<open>A slightly different, but related notion of iteration, is often useful.  Suppose we want to
 parse a keyword in a programming language.  How can we do that, given the combinators that we
@@ -194,7 +199,9 @@ the function to guide you in its definition.  Some of the properties that you wi
 may fail to hold should you get the implementation wrong initially, so you may need to come back and
 re-examine your implementation later.\<close>
   
-consts exacts :: "'a list \<Rightarrow> ('a, 'a list) parser"
+fun exacts :: "'a list \<Rightarrow> ('a, 'a list) parser" where
+  "exacts [] = succeed []" |
+  "exacts (x#xs) = bind (exact x) (\<lambda>a. Parser (\<lambda>ys. (\<lambda>(zs, as). (zs, a#as)) ` (run (exacts xs) ys)))"
   
 text\<open>Lastly, suppose we wish to parse numbers for a programming language interpreter we are writing.
 One way to do this would be to parse a list of digits, returning a string, and then take this string
@@ -224,14 +231,34 @@ Some of the properties that you will later prove below may fail to hold should y
 implementation wrong initially, so you may need to come back and re-examine your implementation
 later.\<close>
   
-consts peq :: "('a, 'b) parser \<Rightarrow> ('a, 'b) parser \<Rightarrow> bool"
-  
+definition peq :: "('a, 'b) parser \<Rightarrow> ('a, 'b) parser \<Rightarrow> bool" where
+    "peq p q = (\<forall>xs. run p xs = run q xs)"
+
 text\<open>We can check that the putative equivalence relation above behaves somewhat correctly by
 checking that it is indeed an equivalence relation, i.e. that it is reflexive, symmetric, and
 transitive.
 
 \textbf{Exercise (3 marks, 1 mark each)}: prove that \texttt{peq} is \emph{reflexive},
 \emph{symmetric}, and \emph{transitive} by stating and proving three relevant lemmas.\<close>
+  
+lemma peq_reflexive:
+  shows "peq p p"
+  apply(simp add: peq_def)
+done
+
+lemma peq_symmetric:
+  shows "peq p q = peq q p"
+  apply(simp add: peq_def)
+  apply(auto)
+done    
+    
+lemma peq_transitive:
+  assumes "peq p q" and
+    "peq q k"
+  shows "peq p k"
+  using assms apply -
+  apply(simp add: peq_def)
+done
     
 subsection\<open>Parsers have a commutative monoidal structure under choice\<close>
   
@@ -247,12 +274,16 @@ commands below with complete proofs.\<close>
 (* 1 marks *)
 lemma choice_ident_fail1:
   shows "peq (fail \<oplus> p1) p1"
-  oops
+  apply(simp add: peq_def)
+  apply(simp add: choice_def run_def fail_def)
+done
     
 (* 1 marks *)
 lemma choice_ident_fail2:
   shows "peq (p1 \<oplus> fail) p1"
-  oops
+  apply(simp add: peq_def)
+  apply(simp add: run_def choice_def fail_def)
+done
     
 text\<open>Moreover, it should be obvious that choice is commutative and associative---it does not and
 should not matter in which order you choose to apply parsers under the choice combinator, as the
@@ -265,12 +296,18 @@ complete proofs.\<close>
 (* 1 marks *)
 lemma choice_comm:
   shows "peq (p1 \<oplus> p2) (p2 \<oplus> p1)"
-  oops
+  apply(simp add: peq_def)
+  apply(simp add: run_def choice_def)
+  apply(auto)
+done
     
 (* 1 marks *)
 lemma choice_assoc:
   shows "peq (p1 \<oplus> (p2 \<oplus> p3)) ((p1 \<oplus> p2) \<oplus> p3)"
-  oops
+  apply(simp add: peq_def)
+  apply(simp add: run_def choice_def)
+  apply(auto)
+done
     
 subsection\<open>Map is functorial, and has an alternative definition\<close>
   
@@ -461,6 +498,8 @@ use the \texttt{do \{ ... \}} syntax is:\<close>
   
 definition noun_phrase' :: "(string, string list) parser" where
   "noun_phrase' \<equiv> bind (one_of determinants) (\<lambda>d. bind (one_of nouns) (\<lambda>n. succeed [d, n]))"
+  
+value "run noun_phrase [''the'', ''woman'']"
   
 text\<open>From this, it should be intuitively clear how a \texttt{do}-block is translated into nested
 binds.

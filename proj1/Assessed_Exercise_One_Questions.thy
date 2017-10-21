@@ -159,7 +159,7 @@ come back and re-examine your implementation later.  You can also use the exampl
 Section~\ref{sect.example.parse} to test whether your definition is reasonable.\<close>
   
 definition bind :: "('a, 'b) parser \<Rightarrow> ('b \<Rightarrow> ('a, 'c) parser) \<Rightarrow> ('a, 'c) parser" where
-  "bind p f \<equiv> Parser (\<lambda>xs. \<Union> ( (\<lambda>(ys, b). run (f b) ys) ` (run p xs) ))"
+  "bind p f \<equiv> Parser (\<lambda>xs. \<Union> ( (\<lambda>(q,r). run (f r) q) ` (run p xs) ))"
   
   
 text\<open>Now that we have a notion of sequencing together two parsers to produce a new parser, we can
@@ -183,7 +183,9 @@ re-examine your implementation later.\<close>
   
 fun biter :: "nat \<Rightarrow> ('a, 'b) parser \<Rightarrow> ('a, 'b list) parser" where
   "biter 0 p = succeed []" |
-  "biter (Suc m) p = bind p (\<lambda>b. Parser (\<lambda>xs. (\<lambda>(ys, bs). (ys, b#bs)) ` (run (biter m p) xs)))"
+  "biter (Suc m) p = bind p (\<lambda>b. Parser (\<lambda>xs. run (bind (biter m p) (\<lambda>bs. succeed (b#bs))) xs))"
+  
+text<  "biter (Suc m) p = bind p (\<lambda>b. Parser (\<lambda>xs. (\<lambda>(ys, bs). (ys, b#bs)) ` (run (biter m p) xs)))" >
 
 
 text\<open>A slightly different, but related notion of iteration, is often useful.  Suppose we want to
@@ -342,7 +344,11 @@ replace the \texttt{oops} command below with a complete proof.\<close>
 (* 2 marks *)    
 lemma map_alternative_def:
   shows "peq (map p f) (bind p (\<lambda>x. succeed (f x)))"
-  oops
+  apply(simp add: peq_def)
+  apply(simp add: run_def map_def bind_def succeed_def split_def)
+  apply(auto)
+done
+  
     
 subsection\<open>Bind and succeed satisfy the monad laws (and other properties)\<close>
     
@@ -362,7 +368,9 @@ proof.\<close>
 (* 1 marks *)
 lemma bind_succeed_collapse:
   shows "peq (bind (succeed x) f) (f x)"
-oops
+  apply(simp add: peq_def)
+  apply(simp add: run_def bind_def succeed_def)
+done
 
 text\<open>The \texttt{bind} combinator also exhibits a kind of ``associativity'' property which allows
 one to rearrange a series of nested applications of \texttt{bind} from being left-associative to
@@ -375,7 +383,10 @@ following lemma.  That is, replace the \texttt{oops} command below with a comple
 (* 1 marks *)    
 lemma bind_assoc:
   shows "peq (bind (bind p f) q) (bind p (\<lambda>x. bind (f x) q))"
-  oops
+  apply(simp add: peq_def)
+  apply(simp add: run_def bind_def split_def)
+  done
+
     
 text\<open>(The previous three properties are sometimes referred to as the ``monad laws'', and hold for
 many useful parameterised types that appear naturally in functional programming with suitable
@@ -395,7 +406,9 @@ proof.\<close>
 (* 1 marks *)
 lemma bind_fail_annihil:
   shows "peq (bind fail f) fail"
-  oops
+  apply(simp add: peq_def)
+  apply(simp add: run_def bind_def fail_def)
+done
     
 text\<open>In addition, the \texttt{bind} and \texttt{choice} combintors also interact well, and one may
 factor \texttt{bind} through the \texttt{choice} combinator freely.
@@ -407,7 +420,10 @@ complete proof.\<close>
 (* 1 marks *)
 lemma bind_choice_split:
   shows "peq (bind (p \<oplus> q) f) (bind p f \<oplus> bind q f)"
-  oops
+  apply(simp add: peq_def)
+  apply(simp add: run_def bind_def choice_def)
+done
+  
     
 text\<open>Lastly, \texttt{bind} has a rather strong interpolation property that not all parameterised
 types that satisfy the monad laws possess (though others, such as the familiar option type do
@@ -420,7 +436,9 @@ the following lemma.  That is, replace the \texttt{oops} command below with a co
 lemma bind_interpolate:
   assumes "run (bind p f) xs = ps"
   shows "\<exists>qs. run p xs = qs \<and> ((\<Union>(q, r)\<in>qs. run (f r) q) = ps)"
-oops
+  using assms apply -
+  apply(simp add: run_def bind_def)
+done
     
 subsection\<open>Properties of iteration\<close>
   
@@ -437,7 +455,10 @@ proof.\<close>
 (* 5 marks *)  
 lemma biter_plus_bind:
   shows "peq (biter (m+n) p) (bind (biter m p) (\<lambda>xs. bind (biter n p) (\<lambda>ys. succeed (xs@ys))))"
-oops
+  apply(simp add: peq_def)
+  apply(simp add: run_def succeed_def bind_def)
+  apply(induction m, simp add:succeed_def)
+    
    
 text\<open>A very similar property holds of the combinator \texttt{exacts}.  If we try to exactly parse a
 keyword \texttt{xs} appended to another keyword \texttt{ys}, then this should be the same as exactly

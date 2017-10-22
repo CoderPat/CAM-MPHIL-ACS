@@ -429,7 +429,7 @@ lemma bind_choice_split:
   shows "peq (bind (p \<oplus> q) f) (bind p f \<oplus> bind q f)"
   apply(simp add: peq_def)
   apply(simp add: run_def bind_def choice_def)
-done
+  done
   
     
 text\<open>Lastly, \texttt{bind} has a rather strong interpolation property that not all parameterised
@@ -491,8 +491,15 @@ lemma peq_bind_right_subst:
   shows "peq (bind p f) (bind p g)"
   using assms apply -
   apply(simp add: peq_def run_def bind_def)
+  done 
     
-       
+lemma bind_assoc_implication:
+  assumes "peq r (bind p (\<lambda>x. bind (f x) q))"
+  shows "peq r (bind (bind p f) q)"
+  using assms apply -
+  apply(simp add: peq_def run_def bind_def split_def)
+  done
+    
 lemma biter_plus_bind:
   shows "peq (biter (m+n) p) (bind (biter m p) (\<lambda>xs. bind (biter n p) (\<lambda>ys. succeed (xs@ys))))"
   apply(induction m , simp add:peq_def run_def bind_def succeed_def)
@@ -501,13 +508,15 @@ lemma biter_plus_bind:
   using bitter_plus_one[where p=p] apply -
   apply(rule_tac p="(bind (biter (Suc 0) p) (\<lambda>xs. bind (biter m p) (\<lambda>ys. succeed (xs@ys))))" in peq_bind_subst_inf)
     apply(simp add:peq_symmetric)
-   apply(simp)
+  apply(simp)
+  apply(rule bind_assoc_implication, rule peq_bind_right_subst)
     
 lemma biter_plus_bind:
   shows "peq (biter (m+n) p) (bind (biter m p) (\<lambda>xs. bind (biter n p) (\<lambda>ys. succeed (xs@ys))))"
   apply(induction m, simp add:peq_def run_def bind_def succeed_def)
+  apply(simp add: peq_def run_def bind_def succeed_def split_def)
     
-  
+find_theorems "(\<forall>x. (?f x = ?g x))" 
 
   
 

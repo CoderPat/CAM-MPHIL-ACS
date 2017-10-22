@@ -183,9 +183,9 @@ re-examine your implementation later.\<close>
   
 fun biter :: "nat \<Rightarrow> ('a, 'b) parser \<Rightarrow> ('a, 'b list) parser" where
   "biter 0 p = succeed []" |
-  "biter (Suc m) p = bind p (\<lambda>b. Parser (\<lambda>xs. run (bind (biter m p) (\<lambda>bs. succeed (b#bs))) xs))"
+  "biter (Suc m) p = bind p (\<lambda>b. Parser (\<lambda>xs. (\<lambda>(ys, bs). (ys, b#bs)) ` (run (biter m p) xs)))"
   
-text<  "biter (Suc m) p = bind p (\<lambda>b. Parser (\<lambda>xs. (\<lambda>(ys, bs). (ys, b#bs)) ` (run (biter m p) xs)))" >
+text<   >
 
 
 text\<open>A slightly different, but related notion of iteration, is often useful.  Suppose we want to
@@ -260,6 +260,13 @@ lemma peq_transitive:
   shows "peq p k"
   using assms apply -
   apply(simp add: peq_def)
+  done
+    
+lemma peq_bind_substitution:
+  assumes "peq p q"
+  shows "peq (bind p f) (bind q f)"
+  using assms apply -
+  apply(simp add: peq_def run_def bind_def)
 done
     
 subsection\<open>Parsers have a commutative monoidal structure under choice\<close>
@@ -381,7 +388,7 @@ to prove.
 following lemma.  That is, replace the \texttt{oops} command below with a complete proof.\<close>
 
 (* 1 marks *)    
-lemma bind_assoc:
+lemma bind_assoc [simp]:
   shows "peq (bind (bind p f) q) (bind p (\<lambda>x. bind (f x) q))"
   apply(simp add: peq_def)
   apply(simp add: run_def bind_def split_def)
@@ -433,7 +440,7 @@ possess a very similar property).
 the following lemma.  That is, replace the \texttt{oops} command below with a complete proof.\<close>
   
 (* 8 marks *)
-lemma bind_interpolate:
+lemma bind_interpolate [simp]:
   assumes "run (bind p f) xs = ps"
   shows "\<exists>qs. run p xs = qs \<and> ((\<Union>(q, r)\<in>qs. run (f r) q) = ps)"
   using assms apply -
@@ -452,12 +459,60 @@ followed by iterating a parser $n$ times, before succeeding with the append of t
 proving the following lemma.  That is, replace the \texttt{oops} command below with a complete
 proof.\<close>
 
-(* 5 marks *)  
+(* 5 marks *) 
+  
+lemma bitter_plus_one_inf:
+  assumes "peq (bind (biter (Suc 0) p) (\<lambda>xs. bind (biter m p) (\<lambda>ys. succeed (xs@ys)))) q"
+  shows "peq (biter (Suc m) p) q"
+  using assms apply -
+  apply(subst peq_symmetric)
+  apply(subst (asm) peq_symmetric)
+  apply(simp add: peq_def bind_def run_def succeed_def)
+  apply(case_tac m, simp add:succeed_def)
+  apply(simp add:split_def bind_def, auto)
+  done
+    
+lemma bitter_plus_one:
+  shows "peq (biter (Suc m) p) (bind (biter (Suc 0) p) (\<lambda>xs. bind (biter m p) (\<lambda>ys. succeed (xs@ys))))"
+  apply(simp add: peq_def bind_def run_def succeed_def)
+  apply(case_tac m, simp add:succeed_def)
+  apply(simp add:split_def bind_def, auto)
+done
+
+lemma peq_bind_subst_inf:
+  assumes "peq p q" and "f = g" and "peq r (bind p f)" 
+  shows "peq r (bind q g)"
+  using assms apply -
+  apply(simp add: peq_def run_def bind_def)
+  done
+
+lemma peq_bind_right_subst:
+  assumes "f=g"
+  shows "peq (bind p f) (bind p g)"
+  using assms apply -
+  apply(simp add: peq_def run_def bind_def)
+    
+       
 lemma biter_plus_bind:
   shows "peq (biter (m+n) p) (bind (biter m p) (\<lambda>xs. bind (biter n p) (\<lambda>ys. succeed (xs@ys))))"
-  apply(simp add: peq_def)
-  apply(simp add: run_def succeed_def bind_def)
-  apply(induction m, simp add:succeed_def)
+  apply(induction m , simp add:peq_def run_def bind_def succeed_def)
+  apply(subst Nat.plus_nat.add_Suc)
+  apply(rule bitter_plus_one_inf)
+  using bitter_plus_one[where p=p] apply -
+  apply(rule_tac p="(bind (biter (Suc 0) p) (\<lambda>xs. bind (biter m p) (\<lambda>ys. succeed (xs@ys))))" in peq_bind_subst_inf)
+    apply(simp add:peq_symmetric)
+   apply(simp)
+    
+lemma biter_plus_bind:
+  shows "peq (biter (m+n) p) (bind (biter m p) (\<lambda>xs. bind (biter n p) (\<lambda>ys. succeed (xs@ys))))"
+  apply(induction m, simp add:peq_def run_def bind_def succeed_def)
+    
+  
+
+  
+
+
+  
     
    
 text\<open>A very similar property holds of the combinator \texttt{exacts}.  If we try to exactly parse a

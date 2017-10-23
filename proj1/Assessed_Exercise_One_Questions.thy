@@ -440,7 +440,7 @@ possess a very similar property).
 the following lemma.  That is, replace the \texttt{oops} command below with a complete proof.\<close>
   
 (* 8 marks *)
-lemma bind_interpolate [simp]:
+lemma bind_interpolate:
   assumes "run (bind p f) xs = ps"
   shows "\<exists>qs. run p xs = qs \<and> ((\<Union>(q, r)\<in>qs. run (f r) q) = ps)"
   using assms apply -
@@ -460,67 +460,12 @@ proving the following lemma.  That is, replace the \texttt{oops} command below w
 proof.\<close>
 
 (* 5 marks *) 
-  
-lemma bitter_plus_one_inf:
-  assumes "peq (bind (biter (Suc 0) p) (\<lambda>xs. bind (biter m p) (\<lambda>ys. succeed (xs@ys)))) q"
-  shows "peq (biter (Suc m) p) q"
-  using assms apply -
-  apply(subst peq_symmetric)
-  apply(subst (asm) peq_symmetric)
-  apply(simp add: peq_def bind_def run_def succeed_def)
-  apply(case_tac m, simp add:succeed_def)
-  apply(simp add:split_def bind_def, auto)
-  done
-    
-lemma bitter_plus_one:
-  shows "peq (biter (Suc m) p) (bind (biter (Suc 0) p) (\<lambda>xs. bind (biter m p) (\<lambda>ys. succeed (xs@ys))))"
-  apply(simp add: peq_def bind_def run_def succeed_def)
-  apply(case_tac m, simp add:succeed_def)
-  apply(simp add:split_def bind_def, auto)
-done
-
-lemma peq_bind_subst_inf:
-  assumes "peq p q" and "f = g" and "peq r (bind p f)" 
-  shows "peq r (bind q g)"
-  using assms apply -
-  apply(simp add: peq_def run_def bind_def)
-  done
-
-lemma peq_bind_right_subst:
-  assumes "f=g"
-  shows "peq (bind p f) (bind p g)"
-  using assms apply -
-  apply(simp add: peq_def run_def bind_def)
-  done 
-    
-lemma bind_assoc_implication:
-  assumes "peq r (bind p (\<lambda>x. bind (f x) q))"
-  shows "peq r (bind (bind p f) q)"
-  using assms apply -
-  apply(simp add: peq_def run_def bind_def split_def)
-  done
-    
-lemma biter_plus_bind:
-  shows "peq (biter (m+n) p) (bind (biter m p) (\<lambda>xs. bind (biter n p) (\<lambda>ys. succeed (xs@ys))))"
-  apply(induction m , simp add:peq_def run_def bind_def succeed_def)
-  apply(subst Nat.plus_nat.add_Suc)
-  apply(rule bitter_plus_one_inf)
-  using bitter_plus_one[where p=p] apply -
-  apply(rule_tac p="(bind (biter (Suc 0) p) (\<lambda>xs. bind (biter m p) (\<lambda>ys. succeed (xs@ys))))" in peq_bind_subst_inf)
-    apply(simp add:peq_symmetric)
-  apply(simp)
-  apply(rule bind_assoc_implication, rule peq_bind_right_subst)
     
 lemma biter_plus_bind:
   shows "peq (biter (m+n) p) (bind (biter m p) (\<lambda>xs. bind (biter n p) (\<lambda>ys. succeed (xs@ys))))"
   apply(induction m, simp add:peq_def run_def bind_def succeed_def)
-  apply(simp add: peq_def run_def bind_def succeed_def split_def)
+  apply(simp add: peq_def bind_def succeed_def split_def)
     
-find_theorems "(\<forall>x. (?f x = ?g x))" 
-
-  
-
-
   
     
    

@@ -183,9 +183,7 @@ re-examine your implementation later.\<close>
   
 fun biter :: "nat \<Rightarrow> ('a, 'b) parser \<Rightarrow> ('a, 'b list) parser" where
   "biter 0 p = succeed []" |
-  "biter (Suc m) p = bind p (\<lambda>b. Parser (\<lambda>xs. (\<lambda>(ys, bs). (ys, b#bs)) ` (run (biter m p) xs)))"
-  
-text<   >
+  "biter (Suc m) p = bind p (\<lambda>b. bind (biter m p) (\<lambda>bs. succeed (b#bs)))"
 
 
 text\<open>A slightly different, but related notion of iteration, is often useful.  Suppose we want to
@@ -203,7 +201,7 @@ re-examine your implementation later.\<close>
   
 fun exacts :: "'a list \<Rightarrow> ('a, 'a list) parser" where
   "exacts [] = succeed []" |
-  "exacts (x#xs) = bind (exact x) (\<lambda>a. Parser (\<lambda>ys. (\<lambda>(zs, as). (zs, a#as)) ` (run (exacts xs) ys)))"
+  "exacts (x#xs) = bind (exact x) (\<lambda>b. bind (exacts xs) (\<lambda>bs. succeed (b#bs)))"
   
 text\<open>Lastly, suppose we wish to parse numbers for a programming language interpreter we are writing.
 One way to do this would be to parse a list of digits, returning a string, and then take this string
@@ -267,7 +265,17 @@ lemma peq_bind_substitution:
   shows "peq (bind p f) (bind q f)"
   using assms apply -
   apply(simp add: peq_def run_def bind_def)
+  done
+    
+lemma peq_eq:
+  assumes "peq p q"
+  shows "p = q"
+  using assms apply -
+  apply(simp add:peq_def run_def)
+  apply(case_tac p, case_tac q)
+  apply(auto)
 done
+  
     
 subsection\<open>Parsers have a commutative monoidal structure under choice\<close>
   
@@ -278,7 +286,8 @@ of our combinators.  First, we examine how \texttt{choice} and the always-failin
 
 \textbf{Exercise (2 marks, 1 mark each)}: prove that \texttt{fail} is a left- and right-neutral
 element for \texttt{choice} by proving the following two lemmas.  That is, replace the \texttt{oops}
-commands below with complete proofs.\<close>
+commands below def bind_def succeed_def)
+  apply(simp add:bind_def, fold bind_def)with complete proofs.\<close>
   
 (* 1 marks *)
 lemma choice_ident_fail1:
@@ -297,7 +306,8 @@ done
 text\<open>Moreover, it should be obvious that choice is commutative and associative---it does not and
 should not matter in which order you choose to apply parsers under the choice combinator, as the
 choice combinator simply collects together all possible parses in one big set.
-
+def bind_def succeed_def)
+  apply(simp add:bind_def, fold bind_def)
 \textbf{Exercise (2 marks, 1 mark each)}: prove that \texttt{choice} is commutative and associative
 by proving the following two lemmas.  That is, replace the \texttt{oops} commands below with
 complete proofs.\<close>
@@ -326,15 +336,17 @@ properties are particularly important, namely:
   \<^item> mapping the identity function $id$ over a list results in the same list,
   \<^item> mapping the composition of two functions, $f \circ g$, over a list is the same as first mapping
     $g$ over that list followed by mapping $f$ over the resulting list.
-
+def bind_def succeed_def)
+  apply(simp add:bind_def, fold bind_def)
 These two properties taken together are sometimes known as ``functoriality'', and a great number of
 similar ``map'' functions on different types possess them.  Indeed, the map function that we have
 defined on parsers also possesses these functoriality properties.
 
-\textbf{Exercise (1 mark)}: show that mapping the identity function over a parser \texttt{p} is
+\textbf{Exercise (1 mark)}: show that mapping the identi  using bind_assoc
+  apply(drule peq_eq)ty function over a parser \texttt{p} is
 equivalent to \texttt{p} by stating and proving a relevant lemma.
 
-\textbf{Exercise (3 marks)}: show that mapping the composition of two functions over a parser is
+\textbf{Exercis  apply(simp add: peq_def bind_def succeed_def split_def)e (3 marks)}: show that mapping the composition of two functions over a parser is
 equivalent to first mapping one function, and then the other, over that same parser by stating and
 proving a relevant lemma.\<close>
   
@@ -355,7 +367,6 @@ lemma map_alternative_def:
   apply(simp add: run_def map_def bind_def succeed_def split_def)
   apply(auto)
 done
-  
     
 subsection\<open>Bind and succeed satisfy the monad laws (and other properties)\<close>
     
@@ -425,7 +436,7 @@ combinator by proving the following lemma.  That is, replace the \texttt{oops} c
 complete proof.\<close>
     
 (* 1 marks *)
-lemma bind_choice_split:
+lemma bind_choice:
   shows "peq (bind (p \<oplus> q) f) (bind p f \<oplus> bind q f)"
   apply(simp add: peq_def)
   apply(simp add: run_def bind_def choice_def)
@@ -438,8 +449,7 @@ possess a very similar property).
 
 \textbf{Exercise (8 marks)}: show that \texttt{bind} exhibits an interpolation property by proving
 the following lemma.  That is, replace the \texttt{oops} command below with a complete proof.\<close>
-  
-(* 8 marks *)
+
 lemma bind_interpolate:
   assumes "run (bind p f) xs = ps"
   shows "\<exists>qs. run p xs = qs \<and> ((\<Union>(q, r)\<in>qs. run (f r) q) = ps)"
@@ -460,22 +470,42 @@ proving the following lemma.  That is, replace the \texttt{oops} command below w
 proof.\<close>
 
 (* 5 marks *) 
+
+lemma bind_assoc_eq [simp]:
+  shows "(bind (bind p f) q) = (bind p (\<lambda>x. bind (f x) q))"
+  apply(rule peq_eq)
+  apply(simp)
+  done
     
+lemma bind_succeed_collapse_eq:
+  shows "(bind (succeed x) f) = (f x)"
+  apply(rule peq_eq)
+  apply(simp add: peq_def)
+  apply(simp add: run_def bind_def succeed_def)
+done
+      
 lemma biter_plus_bind:
   shows "peq (biter (m+n) p) (bind (biter m p) (\<lambda>xs. bind (biter n p) (\<lambda>ys. succeed (xs@ys))))"
   apply(induction m, simp add:peq_def run_def bind_def succeed_def)
-  apply(simp add: peq_def bind_def succeed_def split_def)
-    
-  
-    
-   
+  apply(simp add:bind_def, fold bind_def)
+  apply(subst bind_assoc_eq, simp)
+  apply(subst bind_succeed_collapse_eq)
+  apply(simp add:peq_def run_def bind_def succeed_def)
+  apply(auto)
+  done
+     
 text\<open>A very similar property holds of the combinator \texttt{exacts}.  If we try to exactly parse a
 keyword \texttt{xs} appended to another keyword \texttt{ys}, then this should be the same as exactly
 parsing \texttt{xs} followed by exactly parsing \texttt{ys}, succeeding with the append of the two
 intermediate results as the return value.
 
+
 \textbf{Exercise (5 marks)}: show that this analogous described property holds for the
 \texttt{exacts} combinator by stating and proving a relevant lemma.\<close>
+  
+lemma exacts_plus_bind:
+  shows "peq (exacts (xs@ys)) (bind (exacts (xs)) (\<lambda>r1. bind (exacts (ys)) (\<lambda>r2. succeed(xs@ys))))"
+  
     
 section\<open>Example: parsing a fragment of English\label{sect.example.parse}\<close>
   
@@ -517,7 +547,8 @@ text\<open>A noun phrase in English is a determinant followed by a noun.  Note t
 the two is expressed using \texttt{bind}, albeit hidden beneath the \texttt{do \{ ... \}} syntax.\<close>
 definition noun_phrase :: "(string, string list) parser" where
   "noun_phrase \<equiv>
-     do
+     dodef bind_def succeed_def)
+  apply(simp add:bind_def, fold bind_def)
      { d \<leftarrow> one_of determinants
      ; n \<leftarrow> one_of nouns
      ; succeed [d, n]
@@ -532,7 +563,8 @@ definition noun_phrase' :: "(string, string list) parser" where
 value "run noun_phrase [''the'', ''woman'']"
   
 text\<open>From this, it should be intuitively clear how a \texttt{do}-block is translated into nested
-binds.
+binds.def bind_def succeed_def)
+  apply(simp add:bind_def, fold bind_def)
 
 A verb phrase in English is either a verb, or a transitive verb followed by a noun phrase.
 Note here that this example uses \emph{both} choice and sequencing.\<close>
@@ -548,7 +580,8 @@ definition verb_phrase :: "(string, string list) parser" where
      ; succeed (t#n)
      })"
   
-text\<open>Lastly, a sentence in our English-language fragment is a noun phrase followed by a verb phrase.\<close>
+text\<open>Lastly, a sendef bind_def succeed_def)
+  apply(simp add:bind_def, fold bind_def)tence in our English-language fragment is a noun phrase followed by a verb phrase.\<close>
 definition sentence :: "(string, string list) parser" where
   "sentence \<equiv>
      do { n \<leftarrow> noun_phrase

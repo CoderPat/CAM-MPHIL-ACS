@@ -260,12 +260,19 @@ lemma peq_transitive:
   apply(simp add: peq_def)
   done
     
-lemma peq_bind_substitution:
+lemma peq_bind_subs:
   assumes "peq p q"
   shows "peq (bind p f) (bind q f)"
   using assms apply -
   apply(simp add: peq_def run_def bind_def)
-  done
+done
+    
+lemma peq_choice_subs:
+  assumes "peq p q"
+  shows "peq (p \<oplus> r) (q \<oplus> r) \<and> peq (r \<oplus> p) (r \<oplus> q)"
+  using assms apply -
+  apply(simp add: peq_def run_def choice_def)
+done
     
 lemma peq_eq:
   assumes "peq p q"
@@ -504,7 +511,14 @@ intermediate results as the return value.
 \texttt{exacts} combinator by stating and proving a relevant lemma.\<close>
   
 lemma exacts_plus_bind:
-  shows "peq (exacts (xs@ys)) (bind (exacts (xs)) (\<lambda>r1. bind (exacts (ys)) (\<lambda>r2. succeed(xs@ys))))"
+  shows "peq (exacts (xs@ys)) (bind (exacts (xs)) (\<lambda>r1. bind (exacts (ys)) (\<lambda>r2. succeed(r1@r2))))"
+  apply(induction xs, simp add: exact_def peq_def run_def bind_def succeed_def)
+  apply(simp add:bind_def, fold bind_def)
+  apply(subst bind_assoc_eq, simp)
+  apply(subst bind_succeed_collapse_eq)
+  apply(simp add:peq_def run_def bind_def succeed_def)
+  apply(auto)
+done
   
     
 section\<open>Example: parsing a fragment of English\label{sect.example.parse}\<close>

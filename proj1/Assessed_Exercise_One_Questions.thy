@@ -159,7 +159,7 @@ come back and re-examine your implementation later.  You can also use the exampl
 Section~\ref{sect.example.parse} to test whether your definition is reasonable.\<close>
   
 definition bind :: "('a, 'b) parser \<Rightarrow> ('b \<Rightarrow> ('a, 'c) parser) \<Rightarrow> ('a, 'c) parser" where
-  "bind p f \<equiv> Parser (\<lambda>xs. \<Union> ( (\<lambda>(q,r). run (f r) q) ` (run p xs) ))"
+  "bind p f \<equiv> Parser (\<lambda>xs. \<Union> ((\<lambda>(q,r). run (f r) q) ` (run p xs) ))"
   
   
 text\<open>Now that we have a notion of sequencing together two parsers to produce a new parser, we can
@@ -293,8 +293,7 @@ of our combinators.  First, we examine how \texttt{choice} and the always-failin
 
 \textbf{Exercise (2 marks, 1 mark each)}: prove that \texttt{fail} is a left- and right-neutral
 element for \texttt{choice} by proving the following two lemmas.  That is, replace the \texttt{oops}
-commands below def bind_def succeed_def)
-  apply(simp add:bind_def, fold bind_def)with complete proofs.\<close>
+commands below with complete proofs.\<close>
   
 (* 1 marks *)
 lemma choice_ident_fail1:
@@ -313,8 +312,7 @@ done
 text\<open>Moreover, it should be obvious that choice is commutative and associative---it does not and
 should not matter in which order you choose to apply parsers under the choice combinator, as the
 choice combinator simply collects together all possible parses in one big set.
-def bind_def succeed_def)
-  apply(simp add:bind_def, fold bind_def)
+
 \textbf{Exercise (2 marks, 1 mark each)}: prove that \texttt{choice} is commutative and associative
 by proving the following two lemmas.  That is, replace the \texttt{oops} commands below with
 complete proofs.\<close>
@@ -343,19 +341,32 @@ properties are particularly important, namely:
   \<^item> mapping the identity function $id$ over a list results in the same list,
   \<^item> mapping the composition of two functions, $f \circ g$, over a list is the same as first mapping
     $g$ over that list followed by mapping $f$ over the resulting list.
-def bind_def succeed_def)
-  apply(simp add:bind_def, fold bind_def)
+
 These two properties taken together are sometimes known as ``functoriality'', and a great number of
 similar ``map'' functions on different types possess them.  Indeed, the map function that we have
 defined on parsers also possesses these functoriality properties.
 
-\textbf{Exercise (1 mark)}: show that mapping the identi  using bind_assoc
-  apply(drule peq_eq)ty function over a parser \texttt{p} is
-equivalent to \texttt{p} by stating and proving a relevant lemma.
+\textbf{Exercise (1 mark)}: show that mapping the identity function over a parser \texttt{p} is
+equivalent to \texttt{p} by stating and proving a relevant lemma
 
-\textbf{Exercis  apply(simp add: peq_def bind_def succeed_def split_def)e (3 marks)}: show that mapping the composition of two functions over a parser is
+\textbf{Exercise (3 marks)}: show that mapping the composition of two functions over a parser is
 equivalent to first mapping one function, and then the other, over that same parser by stating and
 proving a relevant lemma.\<close>
+  
+lemma map_id:
+  shows "peq (map p (\<lambda>x. x)) p"
+  apply(simp add: peq_def)
+  apply(simp add: run_def map_def)
+done
+   
+    
+lemma map_cov_composition:
+  shows "peq (map p (f \<circ> g)) (map (map p g) f)"
+  apply(simp add: peq_def)
+  apply(simp add: run_def map_def)
+  apply(force)
+done
+    
   
 text\<open>Earlier we gave a direct definition of \texttt{map} in terms of the set image function.  It was
 rather ``low level'', requiring us to deal directly with the underlying representation of parsers.
@@ -382,6 +393,12 @@ other.  First, we show that \texttt{succeed} acts as a right-neutral element for
 
 \textbf{Exercise (1 mark)}: show that \texttt{succeed} is a right-neutral element for \texttt{bind}
 by stating and proving a relevant lemma.\<close>
+ 
+lemma bind_succeed_neutral:
+  shows "peq (bind p (\<lambda>ys. succeed ys)) p"
+  apply(simp add: peq_def)
+  apply(simp add: bind_def run_def succeed_def)
+done
   
 text\<open>Moreover, succeed also acts as a kind of left-neutral element for bind, albeit in a slightly
 messier way than for the right-neutral case.  As a result, I will provide the lemma statement.
@@ -406,7 +423,7 @@ to prove.
 following lemma.  That is, replace the \texttt{oops} command below with a complete proof.\<close>
 
 (* 1 marks *)    
-lemma bind_assoc [simp]:
+lemma bind_assoc:
   shows "peq (bind (bind p f) q) (bind p (\<lambda>x. bind (f x) q))"
   apply(simp add: peq_def)
   apply(simp add: run_def bind_def split_def)
@@ -478,11 +495,11 @@ proof.\<close>
 
 (* 5 marks *) 
 
-lemma bind_assoc_eq [simp]:
+lemma bind_assoc_eq:
   shows "(bind (bind p f) q) = (bind p (\<lambda>x. bind (f x) q))"
   apply(rule peq_eq)
-  apply(simp)
-  done
+  apply(simp add: bind_assoc)
+done
     
 lemma bind_succeed_collapse_eq:
   shows "(bind (succeed x) f) = (f x)"
@@ -495,11 +512,12 @@ lemma biter_plus_bind:
   shows "peq (biter (m+n) p) (bind (biter m p) (\<lambda>xs. bind (biter n p) (\<lambda>ys. succeed (xs@ys))))"
   apply(induction m, simp add:peq_def run_def bind_def succeed_def)
   apply(simp add:bind_def, fold bind_def)
-  apply(subst bind_assoc_eq, simp)
+  apply(subst bind_assoc_eq)+
   apply(subst bind_succeed_collapse_eq)
   apply(simp add:peq_def run_def bind_def succeed_def)
   apply(auto)
-  done
+done
+    
      
 text\<open>A very similar property holds of the combinator \texttt{exacts}.  If we try to exactly parse a
 keyword \texttt{xs} appended to another keyword \texttt{ys}, then this should be the same as exactly
@@ -514,7 +532,7 @@ lemma exacts_plus_bind:
   shows "peq (exacts (xs@ys)) (bind (exacts (xs)) (\<lambda>r1. bind (exacts (ys)) (\<lambda>r2. succeed(r1@r2))))"
   apply(induction xs, simp add: exact_def peq_def run_def bind_def succeed_def)
   apply(simp add:bind_def, fold bind_def)
-  apply(subst bind_assoc_eq, simp)
+  apply(subst bind_assoc_eq)+
   apply(subst bind_succeed_collapse_eq)
   apply(simp add:peq_def run_def bind_def succeed_def)
   apply(auto)
@@ -561,8 +579,7 @@ text\<open>A noun phrase in English is a determinant followed by a noun.  Note t
 the two is expressed using \texttt{bind}, albeit hidden beneath the \texttt{do \{ ... \}} syntax.\<close>
 definition noun_phrase :: "(string, string list) parser" where
   "noun_phrase \<equiv>
-     dodef bind_def succeed_def)
-  apply(simp add:bind_def, fold bind_def)
+     do
      { d \<leftarrow> one_of determinants
      ; n \<leftarrow> one_of nouns
      ; succeed [d, n]

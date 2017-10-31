@@ -259,21 +259,24 @@ lemma peq_transitive:
   using assms apply -
   apply(simp add: peq_def)
   done
-    
+
+(* extra *) 
 lemma peq_bind_subs:
   assumes "peq p q"
   shows "peq (bind p f) (bind q f)"
   using assms apply -
   apply(simp add: peq_def run_def bind_def)
 done
-    
+ 
+(* extra *)   
 lemma peq_choice_subs:
   assumes "peq p q"
   shows "peq (p \<oplus> r) (q \<oplus> r) \<and> peq (r \<oplus> p) (r \<oplus> q)"
   using assms apply -
   apply(simp add: peq_def run_def choice_def)
 done
-    
+
+(* extra *) 
 lemma peq_eq:
   assumes "peq p q"
   shows "p = q"
@@ -452,6 +455,13 @@ lemma bind_fail_annihil:
   apply(simp add: run_def bind_def fail_def)
 done
     
+(* extra *)  
+lemma bind_right_fail:
+  shows "peq (bind f (\<lambda>_. fail)) fail"
+  apply(simp add: peq_def)
+  apply(simp add: run_def bind_def fail_def)
+done
+    
 text\<open>In addition, the \texttt{bind} and \texttt{choice} combintors also interact well, and one may
 factor \texttt{bind} through the \texttt{choice} combinator freely.
 
@@ -527,6 +537,7 @@ intermediate results as the return value.
 
 \textbf{Exercise (5 marks)}: show that this analogous described property holds for the
 \texttt{exacts} combinator by stating and proving a relevant lemma.\<close>
+  
   
 lemma exacts_plus_bind:
   shows "peq (exacts (xs@ys)) (bind (exacts (xs)) (\<lambda>r1. bind (exacts (ys)) (\<lambda>r2. succeed(r1@r2))))"

@@ -210,7 +210,11 @@ result.  We can capture this pattern using a notion of ``mapping'', similar to t
 lists from standard functional programming:\<close>
   
 definition map :: "('a, 'b) parser \<Rightarrow> ('b \<Rightarrow> 'c) \<Rightarrow> ('a, 'c) parser" where
-  "map p f \<equiv> Parser (\<lambda>xs. (\<lambda>x. (fst x, f (snd x))) ` (run p xs))"
+  "map p f \<equiv> Parser (\<lambda>xs. (\<lambda>(ys, b). (ys, f b)) ` (run p xs))"
+  
+(*extra*)
+definition flatten :: "('a, ('a, 'b) parser) parser \<Rightarrow> ('a, 'b) parser" where
+  "flatten pp \<equiv> Parser(\<lambda>xs. \<Union>( (\<lambda>(ys, p). run p ys) ` (run pp xs)))"
 
 section\<open>Some properties of this library\<close>
   
@@ -362,13 +366,12 @@ lemma map_id:
   apply(simp add: run_def map_def)
 done
    
-    
 lemma map_cov_composition:
   shows "peq (map p (f \<circ> g)) (map (map p g) f)"
   apply(simp add: peq_def)
   apply(simp add: run_def map_def)
   apply(force)
-done
+  done
     
   
 text\<open>Earlier we gave a direct definition of \texttt{map} in terms of the set image function.  It was
@@ -385,8 +388,23 @@ replace the \texttt{oops} command below with a complete proof.\<close>
 lemma map_alternative_def:
   shows "peq (map p f) (bind p (\<lambda>x. succeed (f x)))"
   apply(simp add: peq_def)
-  apply(simp add: run_def map_def bind_def succeed_def split_def)
+  apply(simp add: run_def map_def bind_def succeed_def)
   apply(auto)
+done
+
+(* extra *)
+lemma flatten_alternative_def:
+  shows "peq (flatten pp) (bind pp (\<lambda>p. p))"
+  apply(simp add:peq_def)
+  apply(simp add:run_def flatten_def bind_def)
+done
+    
+(* extra *)
+lemma bind_alternative_def:
+  shows "peq (bind p f) (flatten (map p f))"
+  apply(simp add:peq_def)
+  apply(simp add:run_def flatten_def bind_def map_def)
+  apply(force)
 done
     
 subsection\<open>Bind and succeed satisfy the monad laws (and other properties)\<close>

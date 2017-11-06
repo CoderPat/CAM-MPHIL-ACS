@@ -532,8 +532,7 @@ done
 lemma bind_succeed_collapse_eq:
   shows "(bind (succeed x) f) = (f x)"
   apply(rule peq_eq)
-  apply(simp add: peq_def)
-  apply(simp add: run_def bind_def succeed_def)
+  apply(simp add: bind_succeed_collapse)
 done
       
 lemma biter_plus_bind:
@@ -556,17 +555,32 @@ intermediate results as the return value.
 \textbf{Exercise (5 marks)}: show that this analogous described property holds for the
 \texttt{exacts} combinator by stating and proving a relevant lemma.\<close>
   
-  
 lemma exacts_plus_bind:
   shows "peq (exacts (xs@ys)) (bind (exacts (xs)) (\<lambda>r1. bind (exacts (ys)) (\<lambda>r2. succeed(r1@r2))))"
-  apply(induction xs, simp add: exact_def peq_def run_def bind_def succeed_def)
-  apply(simp add:bind_def, fold bind_def)
-  apply(subst bind_assoc_eq)+
-  apply(subst bind_succeed_collapse_eq)
-  apply(simp add:peq_def run_def bind_def succeed_def)
-  apply(auto)
-done
-  
+proof(induction xs)
+  show "peq (exacts ([] @ ys))
+(bind (exacts []) (\<lambda>r1. bind (exacts ys) (\<lambda>r2. succeed (r1 @ r2))))"
+    by (simp add: exact_def peq_def run_def bind_def succeed_def)
+next
+  fix a xs
+  assume "peq (exacts (xs@ys)) (bind (exacts (xs)) (\<lambda>r1. bind (exacts (ys)) (\<lambda>r2. succeed(r1@r2))))"
+  hence 1:"peq (bind (exact a) (\<lambda>r. bind (exacts (xs @ ys)) (\<lambda>ra. succeed (r # ra))))
+               (bind (exact a) (\<lambda>x. bind (exacts xs) (\<lambda>xa. bind (exacts ys) (\<lambda>r. succeed ((x # xa) @ r)))))"
+    by (auto simp add: exact_def peq_def run_def bind_def succeed_def)
+  hence 2:"peq (exacts (a#xs @ ys))
+               (bind (exact a) (\<lambda>x. bind (exacts xs) (\<lambda>xa. bind (exacts ys) (\<lambda>r. succeed ((x # xa) @ r)))))"
+    by (simp)
+  hence 3:"peq (exacts (a#xs @ ys))
+               (bind (exact a) (\<lambda>x. bind (exacts xs) (\<lambda>xa. bind (succeed (x # xa)) (\<lambda>r. bind (exacts ys) (\<lambda>ra. succeed (r @ ra))))))"
+    by(simp add: run_def succeed_def bind_def)
+  hence 4:"peq (exacts (a#xs @ ys))
+               (bind (bind (exact a) (\<lambda>r. bind (exacts xs) (\<lambda>ra. succeed (r # ra)))) (\<lambda>r. bind (exacts ys) (\<lambda>ra. succeed (r @ ra))))"
+    by(simp add: run_def bind_def split_def)
+  thus "peq (exacts ((a # xs) @ ys)) 
+            (bind (exacts (a # xs)) (\<lambda>r1. bind (exacts ys) (\<lambda>r2. succeed (r1 @ r2))))"
+    by(simp)
+qed
+    
     
 section\<open>Example: parsing a fragment of English\label{sect.example.parse}\<close>
   

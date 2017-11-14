@@ -285,15 +285,38 @@ proof(unfold metric_space_def, clarsimp, safe)
     using assms by (auto simp add: metric_space_def) 
 
   assume "\<delta> x y = 0"
-  hence "x = y"
-    using 1 and 2 and assms by (auto simp add: metric_space_def) 
+  thus "x = y"
+    using 1 and 2 and assms by (simp add: metric_space_def) 
+next
+  fix y
+  assume "y \<in> S" 
+  hence "y \<in> C"
+    using assms by auto
+  thus "\<delta> y y = 0"
+    using assms by (simp add:metric_space_def)
+next
+  fix x y z
+  assume "x \<in> S" and "y \<in> S" and "z \<in> S"
+  hence "x \<in> C" and "y \<in> C" and "z \<in> C"
+    using assms by auto
+  thus "\<delta> x z \<le> \<delta> x y + \<delta> y z"
+    using assms by (simp add:metric_space_def)
+qed
   
-  sorry
+lemma scale_metric:
+  assumes "metric_space \<lparr>carrier = C, metric = \<delta>\<rparr>" and "\<omega> = (\<lambda>x1 x2. k * (\<delta> x1 x2)) "
+    and "k>0"
+  shows "metric_space \<lparr>carrier = C, metric = \<omega>\<rparr>"
+  oops
+
+lemma product_metric_spaces:
+  assumes "metric_space \<lparr>carrier = C1, metric = \<delta>1\<rparr>" 
+     and "metric_space \<lparr>carrier = C2, metric = \<delta>2\<rparr>"
+   shows "metric_space \<lparr>carrier = C1\<times>C2, metric = (\<lambda>(x1, y1) (x2, y2). (\<delta>1 x1 y1) + (\<delta>2 x2 y2))\<rparr>"
+  oops
     
+       
     
-  
-  
-  
          
     
 section\<open>Continuous functions, and some examples\<close>
@@ -312,6 +335,7 @@ captured in Isabelle/HOL as follows:\<close>
   
 context fixes M1 :: "'a metric_space" and M2 :: "'b metric_space" begin
   
+
 definition continuous_at :: "('a \<Rightarrow> 'b) \<Rightarrow> 'a \<Rightarrow> bool" where
   "continuous_at f a \<equiv> \<forall>x\<in>carrier M1. \<forall>\<epsilon>>0.
     (\<exists>d>0. metric M1 x a < d \<longrightarrow> metric M2 (f x) (f a) < \<epsilon>)"
@@ -346,12 +370,42 @@ $t$).  Then $f$ is continuous.
 \textbf{Exercise (4 marks)}: show that constant functions are continuous by proving the following
 lemma.  That is, replace the \texttt{oops} command below with a complete structured proof.\<close>
 
+lemma continuous_id:
+  assumes "metric_space M1"
+  shows "continuous M1 M1 (\<lambda>x. x)"
+proof(simp add:continuous_def continuous_at_def, safe)
+  fix x1 x2
+  fix \<epsilon> :: real
+  assume 1: "0 < \<epsilon>"
+  {
+    assume "metric M1 x2 x1 < \<epsilon>"
+    hence "metric M1 x2 x1 < \<epsilon>"
+      by auto
+  }
+  thus "\<exists>d>0. metric M1 x2 x1 < d \<longrightarrow> metric M1 x2 x1 < \<epsilon>"
+    using 1 by auto
+qed
+
 lemma continuous_const:
   assumes "metric_space M1" and "metric_space M2"
     and "y \<in> carrier M2"
   shows "continuous M1 M2 (\<lambda>x. y)"
-  oops
-    
+proof(simp add:continuous_def continuous_at_def, safe)
+  fix x1 x2
+  fix \<epsilon> :: real
+  assume 1: "0 < \<epsilon>"
+  {
+    assume "metric M1 x2 x1 < \<epsilon>"
+    have "metric M2 y y = 0"
+      using assms by (auto simp add: metric_space_def)
+    hence "metric M2 y y < \<epsilon>"
+      using 1 by auto
+  }
+  thus "\<exists>d>0. metric M1 x2 x1 < d \<longrightarrow> metric M2 y y < \<epsilon>"
+    using 1 by auto
+qed
+   
+  
 text\<open>Lastly, suppose $\langle S, \delta_1\rangle$, $\langle T, \delta_2\rangle$, and
 $\langle U, \delta_3\rangle$ are metric spaces.  Suppose also that $f : S \rightarrow T$ and
 $g : T \rightarrow U$ are continuous functions between relevant metric spaces.  Then, providing
@@ -368,7 +422,30 @@ lemma continuous_comp:
     and "continuous M1 M2 f" and "continuous M2 M3 g"
     and "\<And>x. x \<in> carrier M1 \<Longrightarrow> f x \<in> carrier M2"
   shows "continuous M1 M3 (g o f)"
-oops
+proof(simp add:continuous_def continuous_at_def, safe)
+  fix x1 x2
+  fix \<epsilon> :: real
+  assume 1:"\<epsilon> > 0"
+  assume 2:"x1 \<in> carrier M1" and 3:"x2 \<in> carrier M1"  
+  hence "(f x1) \<in> carrier M2" and "(f x2) \<in> carrier M2"
+    using assms by auto
+  hence "\<exists>d>0. metric M2 (f x2) (f x1) < d \<longrightarrow> metric M3 (g (f x2)) (g (f x1)) < \<epsilon>"
+    using 1 and assms by (auto simp add:continuous_def continuous_at_def)
+  then obtain k::real where 4:"k>0" and 5:"metric M2 (f x2) (f x1) < k \<longrightarrow> metric M3 (g (f x2)) (g (f x1)) < \<epsilon>"
+    by auto
+      
+  have "\<exists>d>0. metric M1 x2 x1 < d \<longrightarrow> metric M2 (f x2) (f x1) < k"
+    using 2 3 4 and assms by (auto simp add:continuous_def continuous_at_def)
+  then obtain d::real where 6:"d>0" and 7:"metric M1 x2 x1 < d \<longrightarrow> metric M2 (f x2) (f x1) < k"
+    by auto
+  {
+    assume "metric M1 x2 x1 < d"
+    hence "metric M3 (g (f x2)) (g (f x1)) < \<epsilon>"
+      using  5 and 7 by (auto)
+  }
+  thus "\<exists>d>0. metric M1 x2 x1 < d \<longrightarrow> metric M3 (g (f x2)) (g (f x1)) < \<epsilon>"
+    using 6 by auto
+qed
   
 section\<open>Open balls\<close>
   
@@ -382,7 +459,9 @@ obvious, I will write $\mathcal{B}(c,r)$ for the open ball around point $c$ of r
 ball $\mathcal{B}(c,r)$ in this metric space by completing the definition of \texttt{open\_ball}.
 That is, replace the \texttt{consts} declaration below with a complete definition.\<close>
 
-consts open_ball :: "'a metric_space \<Rightarrow> 'a \<Rightarrow> real \<Rightarrow> 'a set"
+definition open_ball :: "'a metric_space \<Rightarrow> 'a \<Rightarrow> real \<Rightarrow> 'a set" where
+  "open_ball M c r \<equiv> { x \<in> carrier M. metric M c x < r }"
+    
    
 text\<open>For any open ball $\mathcal{B}(c,r)$ in a metric space $\langle S, \delta\rangle$ we have that
 $\mathcal{B}(c,r) \subseteq S$, i.e. open balls are always subsets of the underlying metric space's
@@ -404,12 +483,48 @@ ball contains its own centre as a point.
 \textbf{Exercise (3 marks)}: show that any open ball in a fixed metric space with strictly positive
 radius contains its centre as a point by proving the following lemma.  That is, replace the
 \texttt{oops} command below with a complete structured proof.\<close>
+
+lemma open_ball_subset_carrier:
+  assumes  "metric_space M" and "c \<in> carrier M"
+  shows "open_ball M c r \<subseteq> carrier M"
+proof -
+  show "open_ball M c r \<subseteq> carrier M"
+    using assms by(auto simp add: open_ball_def)
+qed
+  
+lemma empty_ball:
+  assumes  "metric_space M" and "c \<in> carrier M"
+  shows "open_ball M c 0 = {}"
+proof -
+  {
+    fix x
+    assume 1:"x \<in> open_ball M c 0"
+    hence 2: "x \<in> carrier M"
+      by (auto simp add: open_ball_def)
+    have 3: "metric M c x < 0"
+      using 1 by (auto simp add: open_ball_def)
+    have "metric M c x \<ge> 0"
+      using 2 and assms by (auto simp add: metric_space_def)
+    hence False 
+      using 3 by auto
+  }
+  thus "open_ball M c 0 = {}"
+    by auto
+qed
     
 lemma centre_in_open_ball:
   assumes "metric_space M" and "c \<in> carrier M"
     and "0 < r"
   shows "c \<in> open_ball M c r"
-  oops
+proof -
+  have "metric M c c = 0"
+    using assms by (auto simp add: metric_space_def)
+  hence "metric M c c < r" 
+    using assms by auto
+  thus "c \<in> open_ball M c r"
+    using assms by (auto simp add: open_ball_def)
+qed
+  
     
 text\<open>Lastly, suppose we have two open balls around the same centre point---$\mathcal{B}(c, r)$ and
 $\mathcal{B}(c, s)$---such that $r \leq s$ where $c$ is contained within some ambient fixed metric
@@ -425,7 +540,16 @@ lemma open_ball_le_subset:
   assumes "metric_space M"
     and "c \<in> carrier M" and "r \<le> s"
   shows "open_ball M c r \<subseteq> open_ball M c s"
-  oops
+proof
+  fix x
+  assume "x \<in> open_ball M c r"
+  hence "metric M c x < r" and 1:"x \<in> carrier M"
+    by (auto simp add: open_ball_def)
+  hence "metric M c x < s"
+    using assms by simp
+  thus "x \<in> open_ball M c s"
+    using 1 and assms by (simp add: open_ball_def)
+qed
   
 end
   

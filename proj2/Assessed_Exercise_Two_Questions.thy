@@ -304,10 +304,44 @@ next
 qed
   
 lemma scale_metric:
-  assumes "metric_space \<lparr>carrier = C, metric = \<delta>\<rparr>" and "\<omega> = (\<lambda>x1 x2. k * (\<delta> x1 x2)) "
+  assumes "metric_space \<lparr>carrier = S, metric = \<delta>\<rparr>" and "\<omega> = (\<lambda>x1 x2. k * (\<delta> x1 x2)) "
     and "k>0"
-  shows "metric_space \<lparr>carrier = C, metric = \<omega>\<rparr>"
-  oops
+  shows "metric_space \<lparr>carrier = S, metric = \<omega>\<rparr>"
+proof(unfold metric_space_def, clarsimp, safe)
+  fix x y
+  assume 1:"x \<in> S" and 2:"y \<in> S"
+  hence "\<delta> x y \<ge> 0"
+    using assms by (auto simp add: metric_space_def)
+  thus "\<omega> x y \<ge> 0"
+    using assms by (auto)
+  
+  have "\<delta> x y = \<delta> y x"
+    using 1 2 and assms by (auto simp add: metric_space_def)
+  thus "\<omega> x y = \<omega> y x"
+    using assms by (auto)
+  
+  assume "\<omega> x y = 0"
+  hence "\<delta> x y = 0"
+    using assms by auto
+  thus "x = y"
+    using 1 2 and assms by (auto simp add: metric_space_def)
+next
+  fix y
+  assume "y \<in> S"
+  hence "\<delta> y y = 0"
+    using assms by (auto simp add: metric_space_def)
+  thus "\<omega> y y = 0"
+    using assms by auto
+next
+  fix x y z
+  assume "x \<in> S" and "y \<in> S" and  "z \<in> S"
+  hence "\<delta> x z \<le> \<delta> x y + \<delta> y z"
+    using assms by (auto simp add: metric_space_def)
+  hence "k * (\<delta> x z) \<le> k*(\<delta> x y + \<delta> y z)"
+   using assms by auto
+  thus "k * (\<delta> x z) \<le> k* (\<delta> x y) + k* ( \<delta> y z)"
+   using assms by auto
+  
 
 lemma product_metric_spaces:
   assumes "metric_space \<lparr>carrier = C1, metric = \<delta>1\<rparr>" 

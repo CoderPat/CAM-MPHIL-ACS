@@ -105,6 +105,15 @@ definition metric_space :: "'a metric_space \<Rightarrow> bool" where
      (\<forall>x\<in>carrier M. \<forall>y\<in>carrier M. \<forall>z\<in>carrier M.
         metric M x z \<le> metric M x y + metric M y z)"
   
+locale metric_space_loc =
+  fixes carrier :: "'a set"
+    and metric :: "'a \<Rightarrow> 'a \<Rightarrow> real"
+  assumes non_negative_metric:"(\<forall>x\<in>carrier . \<forall>y\<in>carrier . metric x y \<ge> 0)"
+     and  reflexive_metric:   "(\<forall>x\<in>carrier . \<forall>y\<in>carrier . metric x y = metric y x)"
+     and  discernible_metric: "(\<forall>x\<in>carrier . \<forall>y\<in>carrier . metric x y = 0 \<longleftrightarrow> x = y)"
+     and  subadditive_metric: "(\<forall>x\<in>carrier . \<forall>y\<in>carrier . \<forall>z\<in>carrier.
+                                  metric x z \<le> metric x y + metric y z)"
+  
 text\<open>Note here that I use the same name, \texttt{metric\_space}, to denote both the underlying type
 of metric space records as well as the predicate asserting that those records correctly model a
 metric space.  This does not matter---the two names live in different namespaces.  Now that we have
@@ -127,7 +136,8 @@ show that this pairing is indeed a valid metric space.  We do this by proving th
 \textbf{Exercise (4 marks)}: prove that the predicate \texttt{metric\_space} holds of
 \texttt{real\_abs\_metric\_space} by proving the following theorem.  That is, replace the
 \texttt{oops} command below with a complete structured proof.\<close>
-  
+
+(* 4 marks *)   
 theorem
   shows "metric_space real_abs_metric_space"
 proof(unfold metric_space_def, safe)
@@ -153,6 +163,25 @@ next
     by (simp add :real_abs_metric_space_def)
 qed
   
+interpretation real_metric_space_loc : metric_space_loc "UNIV" "\<lambda>(x::real) (y::real). abs (x - y)"
+proof(standard, safe)
+  fix x y :: real
+  show "0 \<le> \<bar>x - y\<bar>" and "\<bar>x - y\<bar> = \<bar>y - x\<bar>"
+    by (auto)
+  
+  assume "\<bar>x - y\<bar> = 0"
+  thus "x = y"
+    by auto
+next
+  fix y :: real
+  show "\<bar>y - y\<bar> = 0"
+    by auto
+next
+  fix x y z :: real
+  show "\<bar>x - z\<bar> \<le> \<bar>x - y\<bar> + \<bar>y - z\<bar>"
+    by auto
+qed
+  
 text\<open>The set of real numbers can be lifted into a metric space in another way, using the so-called
 \emph{British Rail metric} which models the tendency of all rail journeys between any two points in
 the United Kingdom to proceed by first travelling to London, and then travelling onwards.  (The
@@ -166,7 +195,8 @@ command below with a complete structured proof.\<close>
   
 definition br_metric_space :: "real metric_space" where
   "br_metric_space \<equiv> \<lparr> carrier = UNIV, metric = \<lambda>x y. if x = y then 0 else abs x + abs y \<rparr>"
-  
+ 
+(* 4 marks *)  
 theorem
   shows "metric_space br_metric_space"
 proof(unfold metric_space_def, safe)
@@ -199,6 +229,36 @@ next
     by (simp add :br_metric_space_def)
 qed
     
+interpretation br_metric_space_loc : metric_space_loc UNIV
+                                     "\<lambda> (x::real) (y::real). if x = y then 0 else abs x + abs y"
+proof(standard, safe)
+  fix x y :: real
+  show "0 \<le> (if x = y then 0 else \<bar>x\<bar> + \<bar>y\<bar>)"
+    by auto
+  show "(if x = y then 0 else \<bar>x\<bar> + \<bar>y\<bar>) = (if y = x then 0 else \<bar>y\<bar> + \<bar>x\<bar>)"
+    by auto
+   
+  assume assm: "(if x = y then 0 else \<bar>x\<bar> + \<bar>y\<bar>) = 0"
+  {
+    assume "x\<noteq>y"
+    hence "(if x = y then 0 else \<bar>x\<bar> + \<bar>y\<bar>) \<noteq> 0"
+      by auto
+    hence False
+      using assm by auto
+  }
+  thus "x = y"
+    by auto
+next
+  fix y ::real
+  show "(if y = y then 0 else \<bar>y\<bar> + \<bar>y\<bar>) = 0"
+    by auto
+next
+  fix x y z :: real
+  show "(if x = z then 0 else \<bar>x\<bar> + \<bar>z\<bar>) \<le> 
+          (if x = y then 0 else \<bar>x\<bar> + \<bar>y\<bar>) + (if y = z then 0 else \<bar>y\<bar> + \<bar>z\<bar>)"
+    by auto
+qed
+  
   
 text\<open>As a final example, we consider endowing pairs of integers with a metric.  For pairs of
 integers $(i_1, j_1)$ and $(i_2, j_2)$ one can use $\mid i_1 - i_2 \mid + \mid j_1 - j_2 \mid$ as a
@@ -210,13 +270,14 @@ straightforward.
 \texttt{taxicab\_metric\_space} by proving the following theorem.  That is, replace the \texttt{oops}
 command below with a complete structured proof.\<close>
 
+(* 5 marks *)
 definition taxicab_metric_space :: "(int \<times> int) metric_space" where
   "taxicab_metric_space \<equiv>
     \<lparr> carrier = UNIV, metric = \<lambda>p1 p2. abs (fst p1 - fst p2) + abs (snd p1 - snd p2) \<rparr>"
   
 theorem
   shows "metric_space taxicab_metric_space"
-proof(unfold metric_space_def, safe, rename_tac [!] a b c d, rename_tac [6] a b c d e f)
+proof(unfold metric_space_def, safe)
   fix a b c d :: int
   show "0 \<le> metric taxicab_metric_space (a, b) (c, d)"
     by (simp add: taxicab_metric_space_def )
@@ -227,13 +288,8 @@ next
 next
   fix a b c d :: int
   assume "metric taxicab_metric_space (a, b) (c, d) = 0"
-  thus "a = c"
-    by (simp add: taxicab_metric_space_def )
-next
-  fix a b c d :: int
-  assume "metric taxicab_metric_space (a, b) (c, d) = 0"
-  thus "b = d"
-    by (simp add: taxicab_metric_space_def)
+  thus "a = c" and "b = d"
+    by (auto simp add: taxicab_metric_space_def)
 next
   fix c d :: int
   show "metric taxicab_metric_space (c, d) (c, d) = 0"
@@ -241,7 +297,7 @@ next
 next
   fix a b c d e f :: int
   show "metric taxicab_metric_space (a, b) (e, f) \<le> metric taxicab_metric_space (a, b) (c, d) + metric taxicab_metric_space (c, d) (e, f)"
-    by (simp add: taxicab_metric_space_def )
+    by (simp add: taxicab_metric_space_def)
 qed
   
   
@@ -271,7 +327,8 @@ $(s, t)$ where $s \in S$ and $t \in T$.
 are metric spaces.  Show that the set $S \times T$ can be lifted into a metric space by first
 finding a suitable metric and thereafter proving (with a strucured proof) a relevant lemma.  Your
 metric on $S \times T$ must make use of both $\delta_1$ and $\delta_2$.\<close>
-  
+
+(* 3 marks *)
 lemma subset_metric_space:
   assumes "metric_space \<lparr>carrier = C, metric = \<delta>\<rparr>" and
           "S \<subseteq> C"
@@ -302,7 +359,8 @@ next
   thus "\<delta> x z \<le> \<delta> x y + \<delta> y z"
     using assms by (simp add:metric_space_def)
 qed
-  
+
+(* 3 marks *)
 lemma scale_metric:
   assumes "metric_space \<lparr>carrier = S, metric = \<delta>\<rparr>" and "\<omega> = (\<lambda>x1 x2. k * (\<delta> x1 x2)) "
     and "k>0"
@@ -338,21 +396,65 @@ next
   hence "\<delta> x z \<le> \<delta> x y + \<delta> y z"
     using assms by (auto simp add: metric_space_def)
   hence "k * (\<delta> x z) \<le> k*(\<delta> x y + \<delta> y z)"
-   using assms by auto
-  thus "k * (\<delta> x z) \<le> k* (\<delta> x y) + k* ( \<delta> y z)"
-   using assms by auto
+    using assms by auto
+  hence "k * (\<delta> x z) \<le> k*(\<delta> x y) + k*( \<delta> y z)"
+    using assms  by (simp add: ring_distribs)
+  thus "\<omega> x z \<le> \<omega> x y + \<omega> y z"
+    using assms by auto
+qed
   
-
+(* 5 marks *)
 lemma product_metric_spaces:
   assumes "metric_space \<lparr>carrier = C1, metric = \<delta>1\<rparr>" 
      and "metric_space \<lparr>carrier = C2, metric = \<delta>2\<rparr>"
-   shows "metric_space \<lparr>carrier = C1\<times>C2, metric = (\<lambda>(x1, y1) (x2, y2). (\<delta>1 x1 y1) + (\<delta>2 x2 y2))\<rparr>"
-  oops
-    
-       
-    
-         
-    
+     and "\<omega> = (\<lambda>(x1, x2) (y1, y2). (\<delta>1 x1 y1) + (\<delta>2 x2 y2))"
+   shows "metric_space \<lparr>carrier = C1\<times>C2, metric = \<omega>\<rparr>"
+proof(unfold metric_space_def, clarsimp, safe)
+  fix x1 y1 x2 y2
+  assume 1:"x1 \<in> C1" and 2:"y1 \<in> C1" and 3:"x2 \<in> C2" and 4:"y2 \<in> C2"
+  hence "\<delta>1 x1 y1 \<ge> 0" and "\<delta>2 x2 y2 \<ge> 0"
+    using assms by (auto simp add: metric_space_def)
+  thus "\<omega> (x1, x2) (y1, y2) \<ge> 0"
+    using assms by auto
+  
+  have "\<delta>1 x1 y1 = \<delta>1 y1 x1" and "\<delta>2 x2 y2 = \<delta>2 y2 x2"
+    using 1 2 3 4 and assms  by (auto simp add: metric_space_def)
+  thus "\<omega> (x1, x2) (y1, y2) = \<omega> (y1, y2) (x1, x2)"
+    using assms by auto
+      
+  assume 5:"\<omega> (x1, x2) (y1, y2) = 0"
+  {
+    assume 6:"\<delta>1 x1 y1 \<noteq> 0 \<or> \<delta>2 x2 y2 \<noteq> 0"
+    have 7: "\<delta>1 x1 y1 \<ge> 0 \<and> \<delta>2 x2 y2 \<ge> 0"
+      using 1 2 3 4 and assms by (auto simp add: metric_space_def)
+    hence "\<delta>1 x1 y1 > 0 \<or> \<delta>2 x2 y2 > 0"
+      using 6 by auto
+    hence "\<omega> (x1, x2) (y1, y2) > 0"
+      using 7 and assms by auto
+    hence False
+      using 5 by auto
+  }
+  hence "\<delta>1 x1 y1 = 0" and "\<delta>2 x2 y2 = 0"
+    by auto
+  thus "x1 = y1" and "x2 = y2"
+    using 1 2 3 4 and assms by (auto simp add: metric_space_def)
+next
+  fix x1 x2
+  assume 1:"x1 \<in> C1" and 2:"x2 \<in> C2"
+  hence "\<delta>1 x1 x1 = 0" and "\<delta>2 x2 x2 = 0"
+    using assms by (auto simp add: metric_space_def)
+  thus "\<omega> (x1, x2) (x1, x2) = 0"
+    using assms by auto
+next
+  fix x1 x2 y1 y2 z1 z2
+  assume 1:"x1 \<in> C1" and 2:"y1 \<in> C1" and 3:"z1 \<in> C1" and 4:"x2 \<in> C2" and 5:"y2 \<in> C2" and "z2 \<in> C2"
+  hence "\<delta>1 x1 z1 \<le> \<delta>1 x1 y1 + \<delta>1 y1 z1" and "\<delta>2 x2 z2 \<le> \<delta>2 x2 y2 + \<delta>2 y2 z2"
+    using assms by (auto simp add: metric_space_def)
+  thus "\<omega> (x1, x2) (z1, z2) \<le> \<omega> (x1, x2) (y1, y2) + \<omega> (y1, y2) (z1, z2)"
+    using assms by auto
+qed
+  
+
 section\<open>Continuous functions, and some examples\<close>
   
 text\<open>One reason why metric spaces are mathematically interesting is because they provide an abstract
@@ -404,6 +506,7 @@ $t$).  Then $f$ is continuous.
 \textbf{Exercise (4 marks)}: show that constant functions are continuous by proving the following
 lemma.  That is, replace the \texttt{oops} command below with a complete structured proof.\<close>
 
+(* 3 marks *) 
 lemma continuous_id:
   assumes "metric_space M1"
   shows "continuous M1 M1 (\<lambda>x. x)"
@@ -420,6 +523,7 @@ proof(simp add:continuous_def continuous_at_def, safe)
     using 1 by auto
 qed
 
+(*4 marks *) 
 lemma continuous_const:
   assumes "metric_space M1" and "metric_space M2"
     and "y \<in> carrier M2"
@@ -450,7 +554,8 @@ $\langle U, \delta_3\rangle$.
 \textbf{Exercise (6 marks)}: show that the composition of two continuous functions is continuous by
 proving the following lemma.  That is, replace the \texttt{oops} command below with a complete
 structured proof.\<close>
-  
+
+(* 6 marks *) 
 lemma continuous_comp:
   assumes "metric_space M1" and "metric_space M2" and "metric_space M3"
     and "continuous M1 M2 f" and "continuous M2 M3 g"
@@ -493,10 +598,11 @@ obvious, I will write $\mathcal{B}(c,r)$ for the open ball around point $c$ of r
 ball $\mathcal{B}(c,r)$ in this metric space by completing the definition of \texttt{open\_ball}.
 That is, replace the \texttt{consts} declaration below with a complete definition.\<close>
 
+(* 2 marks *) 
 definition open_ball :: "'a metric_space \<Rightarrow> 'a \<Rightarrow> real \<Rightarrow> 'a set" where
   "open_ball M c r \<equiv> { x \<in> carrier M. metric M c x < r }"
     
-   
+  
 text\<open>For any open ball $\mathcal{B}(c,r)$ in a metric space $\langle S, \delta\rangle$ we have that
 $\mathcal{B}(c,r) \subseteq S$, i.e. open balls are always subsets of the underlying metric space's
 carrier set.  This fact holds for any ball of any radius.
@@ -518,6 +624,7 @@ ball contains its own centre as a point.
 radius contains its centre as a point by proving the following lemma.  That is, replace the
 \texttt{oops} command below with a complete structured proof.\<close>
 
+(* 2 marks *) 
 lemma open_ball_subset_carrier:
   assumes  "metric_space M" and "c \<in> carrier M"
   shows "open_ball M c r \<subseteq> carrier M"
@@ -526,6 +633,7 @@ proof -
     using assms by(auto simp add: open_ball_def)
 qed
   
+(* 2 marks *)  
 lemma empty_ball:
   assumes  "metric_space M" and "c \<in> carrier M"
   shows "open_ball M c 0 = {}"
@@ -546,6 +654,7 @@ proof -
     by auto
 qed
     
+(* 3 marks *)
 lemma centre_in_open_ball:
   assumes "metric_space M" and "c \<in> carrier M"
     and "0 < r"
@@ -570,6 +679,7 @@ radius than another open ball around the same fixed centre point is a subset of 
 by proving the following theorem.  That is, replace the \texttt{oops} command below with a complete
 structured proof.\<close>
   
+(* 4 marks *)
 lemma open_ball_le_subset:
   assumes "metric_space M"
     and "c \<in> carrier M" and "r \<le> s"
@@ -584,9 +694,180 @@ proof
   thus "x \<in> open_ball M c s"
     using 1 and assms by (simp add: open_ball_def)
 qed
+ 
+context metric_space_loc
+begin
+
+definition cauchy where
+  "cauchy seq \<equiv> (\<forall>\<epsilon>>0. \<exists>p. \<forall>m\<ge>p. \<forall>n\<ge>p. metric (seq m) (seq n) < \<epsilon>)"
+
+definition is_limit where
+  "is_limit seq l \<equiv> \<forall>\<epsilon>>0. \<exists>p. \<forall>n\<ge>p. metric (seq n) l < \<epsilon>"
   
+definition convergent where
+  "convergent seq \<equiv> (\<exists>x0\<in>carrier. is_limit seq x0)"
+
+lemma unique_limit:
+  assumes "is_limit seq x" and "is_limit seq y"
+  shows "x = y"
+  sorry
+    
+lemma continuous_limits:
+  shows "is_limit (f \<circ> seq) (f l) = is_limit seq l"
+  sorry
+
+lemma limits_preserved:
+  shows "is_limit seq l = is_limit (\<lambda>n. seq (n+1)) l"
+  sorry
+
+lemma 
+   
+lemma convergent_cauchy:
+  fixes seq::"nat \<Rightarrow> 'a" 
+  assumes "\<forall>n. seq n \<in> carrier" and "convergent seq"
+  shows "cauchy seq"
+proof(unfold cauchy_def, safe)
+  fix \<epsilon> :: real
+  assume \<epsilon>:"\<epsilon> > 0"
+  obtain \<delta>::real where \<delta>:"\<epsilon> = \<delta>*2" "\<delta> > 0"
+  proof
+    show "\<epsilon> = (\<epsilon>/2) * 2"
+      by auto
+    show "\<epsilon>/2 > 0"
+      using \<epsilon> by auto
+  qed
+  obtain x0 where 2:"x0 \<in> carrier" and "\<forall>\<epsilon>>0. \<exists>p. \<forall>n\<ge>p. metric (seq n) x0 < \<epsilon>"
+    using assms by (auto simp add: convergent_def is_limit_def)
+  hence "\<exists>p. \<forall>n\<ge>p. metric (seq n) x0 < \<delta>"
+    using \<delta> by auto
+  then obtain p where 3:"\<forall>n\<ge>p. metric (seq n) x0 < \<delta>"
+    by auto
+  {
+    fix n m :: nat
+    assume "m \<ge> p" and "n \<ge> p"
+    hence  "metric (seq n) x0 < \<delta>" and "metric (seq m) x0 < \<delta>"
+      using 3 by auto
+    hence 4:"metric (seq n) x0 < \<delta>" and 5:"metric x0 (seq m) < \<delta>"
+      using 2 and assms by (auto simp add: reflexive_metric)
+    have "metric (seq n) (seq m) \<le> metric (seq n) x0 + metric x0 (seq m)"
+      using 2 and assms by (auto simp add:subadditive_metric)
+    hence "metric (seq n) (seq m) < \<delta> + \<delta>"
+      using 4 5 by auto
+    hence "metric (seq n) (seq m) < \<epsilon>"
+      using \<delta> by auto
+  }
+  thus "\<exists>p. \<forall>m\<ge>p. \<forall>n\<ge>p. metric (seq m) (seq n) < \<epsilon>"
+    using \<epsilon> by auto
+qed
 end
   
+locale complete_metric_space = metric_space_loc +
+  assumes completness: "\<forall>seq::(nat\<Rightarrow>'a). cauchy seq \<longrightarrow> convergent seq"
+
+context complete_metric_space
+begin
+  
+definition contraction_map where
+  "contraction_map f \<equiv> (\<exists>q\<ge>0. q<1 \<and> (\<forall>x\<in>carrier. \<forall>y\<in>carrier. metric (f x) (f y) \<le> q * metric x y))"
+  
+fun iter ::  "nat \<Rightarrow> ('a \<Rightarrow> 'a) \<Rightarrow> 'a \<Rightarrow> 'a" where 
+  "iter 0 f x = x" |
+  "iter n f x = f (iter (n-1) f x)"
+  
+lemma iter_closure:
+  assumes "\<And>x. x \<in> carrier \<Longrightarrow> f x \<in> carrier" and "x0 \<in> carrier"
+  shows "iter n f x0 \<in> carrier"
+proof(induction n)
+  show "iter 0 f x0 \<in> carrier"
+    using assms by auto
+next
+  fix n
+  assume "iter n f x0 \<in> carrier"
+  thus "iter (Suc n) f x0 \<in> carrier"
+    using assms by auto
+qed
+ 
+  
+theorem banach_fixed_point:
+  assumes "\<And>x. x \<in> carrier \<Longrightarrow> f x \<in> carrier"
+  assumes "contraction_map f"
+  assumes "\<exists>x0. x0 \<in> carrier"
+  shows "\<exists>x\<in>carrier. f x = x"
+proof -
+  obtain x0 where x0:"x0 \<in> carrier"
+    using assms by auto
+  obtain q::real where q:"q\<ge>0" "q<1" "\<forall>x\<in>carrier. \<forall>y\<in>carrier. metric (f x) (f y) \<le> q * metric x y"
+    using assms by (auto simp add: contraction_map_def)
+      
+  (* first part *)
+  have "metric (iter (n+1) f x0) (iter n f x0) \<le> q^n * metric (f x0) x0"
+  proof(induction n)
+    show "metric (iter (0 + 1) f x0) (iter 0 f x0) \<le> q ^ 0 * metric (f x0) x0"
+      by auto
+  next
+    fix n
+    assume "metric (iter (n + 1) f x0) (iter n f x0) \<le> q ^ n * metric (f x0) x0"
+    hence IH:"q * (metric (iter (n + 1) f x0) (iter n f x0)) \<le> q * (q ^ n * metric (f x0) x0)"
+      using q by (simp add: mult_left_mono)
+    have "iter (n + 1) f x0 \<in> carrier" and "iter n f x0 \<in> carrier"
+      using x0 and assms by (auto simp add: iter_closure)
+    hence "metric (f (iter (n + 1) f x0)) (f (iter n f x0)) \<le> q * metric (iter (n + 1) f x0) (iter n f x0)"
+      using x0 and q assms by (auto)
+    hence "metric (f (iter (n + 1) f x0)) (f (iter n f x0)) \<le> q * q ^ n * metric (f x0) x0"
+      using IH by auto
+    thus "metric (iter (Suc n + 1) f x0) (iter (Suc n) f x0) \<le> q ^ Suc n * metric (f x0) x0"
+      by auto
+  qed
+    
+  (* second part *)
+  hence "convergent (\<lambda>n. iter n f x0)"
+  proof -
+    fix m n :: nat
+    assume m:"m > 0"
+    hence 1:"metric (iter m f x0) (iter 0 f x0) \<le> (\<Sum>i\<in>{0..<m}. metric (iter (i+1) f x0) (iter i f x0))" 
+    proof(induct "m")
+      show "metric (iter 0 f x0) (iter 0 f x0) \<le> (\<Sum>i = 0..<0. metric (iter (i + 1) f x0) (iter i f x0))"
+        using discernible_metric x0 by fastforce
+    next
+      fix m
+      assume "0 < m \<Longrightarrow> metric (iter m f x0) (iter 0 f x0) \<le> (\<Sum>i = 0..<m. metric (iter (i + 1) f x0) (iter i f x0))"
+      hence "metric (iter m f x0) (iter 0 f x0) \<le> (\<Sum>i = 0..<m. metric (iter (i + 1) f x0) (iter i f x0))"
+        using discernible_metric x0 by fastforce
+      hence 1:"metric (iter (Suc m) f x0) (iter m f x0) + metric (iter m f x0) (iter 0 f x0) \<le> 
+            (\<Sum>i = 0..<(Suc m). metric (iter (i + 1) f x0) (iter i f x0))"
+        by auto
+      hence "metric (iter (Suc m) f x0) (iter 0 f x0) \<le> metric (iter (Suc m) f x0) (iter m f x0) + metric (iter m f x0) (iter 0 f x0)"
+        using assms by (simp add: iter_closure subadditive_metric x0)
+      thus "metric (iter (Suc m) f x0) (iter 0 f x0) \<le> (\<Sum>i = 0..<Suc m. metric (iter (i + 1) f x0) (iter i f x0))"
+        using 1 by auto
+    qed
+       
+  qed
+    
+  (* third part *)
+  then obtain x where x:"x\<in>carrier" "is_limit (\<lambda>n. iter n f x0) x"
+    by (auto simp add: convergent_def)
+  hence "is_limit (f \<circ> (\<lambda>n. iter n f x0)) (f x)"
+    by (auto simp add: continuous_limits)
+  hence "is_limit (\<lambda>n. iter (n+1) f x0) (f x)"
+    by (auto simp add:o_def)
+  hence step:"is_limit (\<lambda>n. (\<lambda>n. iter n f x0) (n+1)) (f x)"
+    by auto
+  have "is_limit (\<lambda>n. iter n f x0) (f x) = is_limit (\<lambda>n. (\<lambda>n. iter n f x0) (n+1)) (f x)"
+    by (rule limits_preserved)
+  hence "is_limit (\<lambda>n. iter n f x0) (f x)"
+    using step by auto
+  hence "x\<in>carrier" and "x = f x"
+    using x by (auto simp add: unique_limit)
+  thus "\<exists>x\<in>carrier. f x = x"
+     by force
+qed
+
+end
+
+find_theorems "induct"
+thm "setsum_atMost_Suc"
+
 text\<open>
 \begin{center}
 \emph{The end\ldots}

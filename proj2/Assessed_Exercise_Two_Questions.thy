@@ -193,42 +193,7 @@ before.
 \texttt{br\_metric\_space} by proving the following theorem.  That is, replace the \texttt{oops}
 command below with a complete structured proof.\<close>
   
-definition br_metric_space :: "real metric_space" where
-  "br_metric_space \<equiv> \<lparr> carrier = UNIV, metric = \<lambda>x y. if x = y then 0 else abs x + abs y \<rparr>"
- 
 (* 4 marks *)  
-theorem
-  shows "metric_space br_metric_space"
-proof(unfold metric_space_def, safe)
-  fix x y :: real 
-  show "0 \<le> metric br_metric_space x y"
-    by (simp add: br_metric_space_def)
-next
-  fix x y :: real 
-  show "metric br_metric_space y x = metric br_metric_space x y"
-    by (simp add: br_metric_space_def) 
-next
-  fix x y :: real
-  assume assumption: "metric br_metric_space x y = 0"
-  {
-    assume "x \<noteq> y"
-    hence "metric br_metric_space x y \<noteq> 0"
-      by (simp add: br_metric_space_def)
-    hence False
-      using assumption by auto 
-  }
-  thus "x = y"
-    by auto
-next
-  fix y :: real
-  show "metric br_metric_space y y = 0"
-    by (simp add: br_metric_space_def) 
-next
-  fix x y z :: real
-  show "metric br_metric_space x z \<le> metric br_metric_space x y + metric br_metric_space y z"
-    by (simp add :br_metric_space_def)
-qed
-    
 interpretation br_metric_space_loc : metric_space_loc UNIV
                                      "\<lambda> (x::real) (y::real). if x = y then 0 else abs x + abs y"
 proof(standard, safe)
@@ -271,34 +236,39 @@ straightforward.
 command below with a complete structured proof.\<close>
 
 (* 5 marks *)
-definition taxicab_metric_space :: "(int \<times> int) metric_space" where
-  "taxicab_metric_space \<equiv>
-    \<lparr> carrier = UNIV, metric = \<lambda>p1 p2. abs (fst p1 - fst p2) + abs (snd p1 - snd p2) \<rparr>"
+interpretation taxicab_metric_space : metric_space_loc "UNIV" 
+                           "\<lambda>(x1::int, x2::int) (y1::int, y2::int). abs (x1 - y1) + abs (x2 - y2)"
+proof(standard, safe)
+  fix x1 x2 y1 y2 :: int
+  show "0 \<le> real_of_int(\<bar>x1 - y1\<bar> + \<bar>x2 - y2\<bar>)"
+    by simp
+  show "real_of_int (\<bar>x1 - y1\<bar> + \<bar>x2 - y2\<bar>) = real_of_int (\<bar>y1 - x1\<bar> + \<bar>y2 -x2\<bar>)"
+    by simp
   
-theorem
-  shows "metric_space taxicab_metric_space"
-proof(unfold metric_space_def, safe)
-  fix a b c d :: int
-  show "0 \<le> metric taxicab_metric_space (a, b) (c, d)"
-    by (simp add: taxicab_metric_space_def )
+  assume a:"real_of_int (\<bar>x1 - y1\<bar> + \<bar>x2 - y2\<bar>)  = 0"
+  {
+    assume 1:"\<bar>x1 - y1\<bar> \<noteq> 0 \<or> \<bar>x2 - y2\<bar> \<noteq> 0"
+    have "\<bar>x1 - y1\<bar> \<ge> 0 \<and> \<bar>x2 - y2\<bar> \<ge> 0"
+      by auto
+    hence "\<bar>x1 - y1\<bar> > 0 \<and> \<bar>x2 - y2\<bar> > 0"
+      using 1 a by linarith
+    hence "real_of_int (\<bar>x1 - y1\<bar> + \<bar>x2 - y2\<bar>) > 0"
+      by auto
+    hence False
+      using a by auto
+  }
+  thus "x1 = y1" and "x2 = y2"
+    by auto
 next
-  fix a b c d :: int
-  show "metric taxicab_metric_space (a, b) (c, d) = metric taxicab_metric_space (c, d) (a, b)"
-    by (simp add: taxicab_metric_space_def )
+  fix x1 x2
+  show "real_of_int (\<bar>x1 - x1\<bar> + \<bar>x2 - x2\<bar>) = 0"
+    by auto
 next
-  fix a b c d :: int
-  assume "metric taxicab_metric_space (a, b) (c, d) = 0"
-  thus "a = c" and "b = d"
-    by (auto simp add: taxicab_metric_space_def)
-next
-  fix c d :: int
-  show "metric taxicab_metric_space (c, d) (c, d) = 0"
-    by (simp add: taxicab_metric_space_def )
-next
-  fix a b c d e f :: int
-  show "metric taxicab_metric_space (a, b) (e, f) \<le> metric taxicab_metric_space (a, b) (c, d) + metric taxicab_metric_space (c, d) (e, f)"
-    by (simp add: taxicab_metric_space_def)
-qed
+  fix x1 x2 y1 y2 z1 z2
+  show "real_of_int (\<bar>x1 - z1\<bar> + \<bar>x2 - z2\<bar>) \<le> 
+              real_of_int (\<bar>x1 - y1\<bar> + \<bar>x2 - y2\<bar>) + real_of_int (\<bar>y1 - z1\<bar> + \<bar>y2 - z2\<bar>)"
+    by linarith
+qed 
   
   
 section\<open>Making new metric spaces from old\<close>
@@ -329,52 +299,53 @@ finding a suitable metric and thereafter proving (with a strucured proof) a rele
 metric on $S \times T$ must make use of both $\delta_1$ and $\delta_2$.\<close>
 
 (* 3 marks *)
+
 lemma subset_metric_space:
-  assumes "metric_space \<lparr>carrier = C, metric = \<delta>\<rparr>" and
+  assumes "metric_space_loc C \<delta>" and
           "S \<subseteq> C"
-        shows "metric_space \<lparr>carrier = S, metric = \<delta>\<rparr>"
-proof(unfold metric_space_def, clarsimp, safe)
+        shows "metric_space_loc S \<delta>"
+proof(unfold metric_space_loc_def, clarsimp, safe)
   fix x y
   assume "x \<in> S" and "y \<in> S" 
   hence 1: "x \<in> C" and 2:"y \<in> C"
     using assms by auto
   thus "0 \<le> \<delta> x y" and "\<delta> x y = \<delta> y x" 
-    using assms by (auto simp add: metric_space_def) 
+    using assms by (auto simp add: metric_space_loc_def) 
 
   assume "\<delta> x y = 0"
   thus "x = y"
-    using 1 and 2 and assms by (simp add: metric_space_def) 
+    using 1 and 2 and assms by (simp add: metric_space_loc_def) 
 next
   fix y
   assume "y \<in> S" 
   hence "y \<in> C"
     using assms by auto
   thus "\<delta> y y = 0"
-    using assms by (simp add:metric_space_def)
+    using assms by (simp add:metric_space_loc_def)
 next
   fix x y z
   assume "x \<in> S" and "y \<in> S" and "z \<in> S"
   hence "x \<in> C" and "y \<in> C" and "z \<in> C"
     using assms by auto
   thus "\<delta> x z \<le> \<delta> x y + \<delta> y z"
-    using assms by (simp add:metric_space_def)
+    using assms by (simp add:metric_space_loc_def)
 qed
 
 (* 3 marks *)
 lemma scale_metric:
-  assumes "metric_space \<lparr>carrier = S, metric = \<delta>\<rparr>" and "\<omega> = (\<lambda>x1 x2. k * (\<delta> x1 x2)) "
-    and "k>0"
-  shows "metric_space \<lparr>carrier = S, metric = \<omega>\<rparr>"
-proof(unfold metric_space_def, clarsimp, safe)
+  assumes "metric_space_loc S \<delta>" 
+    and "\<omega> = (\<lambda>x1 x2. k * (\<delta> x1 x2)) " and "k>0"
+  shows "metric_space_loc S \<omega>"
+proof(unfold metric_space_loc_def, clarsimp, safe)
   fix x y
   assume 1:"x \<in> S" and 2:"y \<in> S"
   hence "\<delta> x y \<ge> 0"
-    using assms by (auto simp add: metric_space_def)
+    using assms by (auto simp add: metric_space_loc_def)
   thus "\<omega> x y \<ge> 0"
     using assms by (auto)
   
   have "\<delta> x y = \<delta> y x"
-    using 1 2 and assms by (auto simp add: metric_space_def)
+    using 1 2 and assms by (auto simp add: metric_space_loc_def)
   thus "\<omega> x y = \<omega> y x"
     using assms by (auto)
   
@@ -382,19 +353,19 @@ proof(unfold metric_space_def, clarsimp, safe)
   hence "\<delta> x y = 0"
     using assms by auto
   thus "x = y"
-    using 1 2 and assms by (auto simp add: metric_space_def)
+    using 1 2 and assms by (auto simp add: metric_space_loc_def)
 next
   fix y
   assume "y \<in> S"
   hence "\<delta> y y = 0"
-    using assms by (auto simp add: metric_space_def)
+    using assms by (auto simp add: metric_space_loc_def)
   thus "\<omega> y y = 0"
     using assms by auto
 next
   fix x y z
   assume "x \<in> S" and "y \<in> S" and  "z \<in> S"
   hence "\<delta> x z \<le> \<delta> x y + \<delta> y z"
-    using assms by (auto simp add: metric_space_def)
+    using assms by (auto simp add: metric_space_loc_def)
   hence "k * (\<delta> x z) \<le> k*(\<delta> x y + \<delta> y z)"
     using assms by auto
   hence "k * (\<delta> x z) \<le> k*(\<delta> x y) + k*( \<delta> y z)"
@@ -405,20 +376,20 @@ qed
   
 (* 5 marks *)
 lemma product_metric_spaces:
-  assumes "metric_space \<lparr>carrier = C1, metric = \<delta>1\<rparr>" 
-     and "metric_space \<lparr>carrier = C2, metric = \<delta>2\<rparr>"
+  assumes "metric_space_loc C1 \<delta>1" 
+     and "metric_space_loc C2 \<delta>2"
      and "\<omega> = (\<lambda>(x1, x2) (y1, y2). (\<delta>1 x1 y1) + (\<delta>2 x2 y2))"
-   shows "metric_space \<lparr>carrier = C1\<times>C2, metric = \<omega>\<rparr>"
-proof(unfold metric_space_def, clarsimp, safe)
+   shows "metric_space_loc (C1\<times>C2) \<omega>"
+proof(unfold metric_space_loc_def, clarsimp, safe)
   fix x1 y1 x2 y2
   assume 1:"x1 \<in> C1" and 2:"y1 \<in> C1" and 3:"x2 \<in> C2" and 4:"y2 \<in> C2"
   hence "\<delta>1 x1 y1 \<ge> 0" and "\<delta>2 x2 y2 \<ge> 0"
-    using assms by (auto simp add: metric_space_def)
+    using assms by (auto simp add: metric_space_loc_def)
   thus "\<omega> (x1, x2) (y1, y2) \<ge> 0"
     using assms by auto
   
   have "\<delta>1 x1 y1 = \<delta>1 y1 x1" and "\<delta>2 x2 y2 = \<delta>2 y2 x2"
-    using 1 2 3 4 and assms  by (auto simp add: metric_space_def)
+    using 1 2 3 4 and assms  by (auto simp add: metric_space_loc_def)
   thus "\<omega> (x1, x2) (y1, y2) = \<omega> (y1, y2) (x1, x2)"
     using assms by auto
       
@@ -426,7 +397,7 @@ proof(unfold metric_space_def, clarsimp, safe)
   {
     assume 6:"\<delta>1 x1 y1 \<noteq> 0 \<or> \<delta>2 x2 y2 \<noteq> 0"
     have 7: "\<delta>1 x1 y1 \<ge> 0 \<and> \<delta>2 x2 y2 \<ge> 0"
-      using 1 2 3 4 and assms by (auto simp add: metric_space_def)
+      using 1 2 3 4 and assms by (auto simp add: metric_space_loc_def)
     hence "\<delta>1 x1 y1 > 0 \<or> \<delta>2 x2 y2 > 0"
       using 6 by auto
     hence "\<omega> (x1, x2) (y1, y2) > 0"
@@ -437,19 +408,19 @@ proof(unfold metric_space_def, clarsimp, safe)
   hence "\<delta>1 x1 y1 = 0" and "\<delta>2 x2 y2 = 0"
     by auto
   thus "x1 = y1" and "x2 = y2"
-    using 1 2 3 4 and assms by (auto simp add: metric_space_def)
+    using 1 2 3 4 and assms by (auto simp add: metric_space_loc_def)
 next
   fix x1 x2
   assume 1:"x1 \<in> C1" and 2:"x2 \<in> C2"
   hence "\<delta>1 x1 x1 = 0" and "\<delta>2 x2 x2 = 0"
-    using assms by (auto simp add: metric_space_def)
+    using assms by (auto simp add: metric_space_loc_def)
   thus "\<omega> (x1, x2) (x1, x2) = 0"
     using assms by auto
 next
   fix x1 x2 y1 y2 z1 z2
   assume 1:"x1 \<in> C1" and 2:"y1 \<in> C1" and 3:"z1 \<in> C1" and 4:"x2 \<in> C2" and 5:"y2 \<in> C2" and "z2 \<in> C2"
   hence "\<delta>1 x1 z1 \<le> \<delta>1 x1 y1 + \<delta>1 y1 z1" and "\<delta>2 x2 z2 \<le> \<delta>2 x2 y2 + \<delta>2 y2 z2"
-    using assms by (auto simp add: metric_space_def)
+    using assms by (auto simp add: metric_space_loc_def)
   thus "\<omega> (x1, x2) (z1, z2) \<le> \<omega> (x1, x2) (y1, y2) + \<omega> (y1, y2) (z1, z2)"
     using assms by auto
 qed
@@ -469,15 +440,15 @@ $\delta_2 (f x, f s) < \epsilon$.  Further, call the function $f : S \rightarrow
 \emph{continuous} if $f$ is continuous at every point $s \in S$.  These two definitions can be
 captured in Isabelle/HOL as follows:\<close>
   
-context fixes M1 :: "'a metric_space" and M2 :: "'b metric_space" begin
-  
+context fixes carrier1 :: "'a set" and metric1 :: "'a \<Rightarrow> 'a \<Rightarrow> real"
+          and carrier2 :: "'b set" and metric2 :: "'b \<Rightarrow> 'b \<Rightarrow> real" begin
 
 definition continuous_at :: "('a \<Rightarrow> 'b) \<Rightarrow> 'a \<Rightarrow> bool" where
-  "continuous_at f a \<equiv> \<forall>x\<in>carrier M1. \<forall>\<epsilon>>0.
-    (\<exists>d>0. metric M1 x a < d \<longrightarrow> metric M2 (f x) (f a) < \<epsilon>)"
+  "continuous_at f a \<equiv> \<forall>x\<in>carrier1. \<forall>\<epsilon>>0.
+    (\<exists>d>0. metric1 x a < d \<longrightarrow> metric2  (f x) (f a) < \<epsilon>)"
   
 definition continuous :: "('a \<Rightarrow> 'b) \<Rightarrow> bool" where
-  "continuous f \<equiv> \<forall>x\<in>carrier M1. continuous_at f x"
+  "continuous f \<equiv> \<forall>x\<in>carrier1. continuous_at f x"
   
 end
   
@@ -507,8 +478,10 @@ $t$).  Then $f$ is continuous.
 lemma.  That is, replace the \texttt{oops} command below with a complete structured proof.\<close>
 
 (* 3 marks *) 
+  
+
 lemma continuous_id:
-  assumes "metric_space M1"
+  assumes "metric_space"
   shows "continuous M1 M1 (\<lambda>x. x)"
 proof(simp add:continuous_def continuous_at_def, safe)
   fix x1 x2
@@ -786,7 +759,127 @@ next
   thus "iter (Suc n) f x0 \<in> carrier"
     using assms by auto
 qed
- 
+  
+lemma iter_collapse:
+  assumes "\<And>x. x \<in> carrier \<Longrightarrow> f x \<in> carrier"
+  assumes "q\<ge>0" "q < 1" "\<forall>x\<in>carrier. \<forall>y\<in>carrier. metric (f x) (f y) \<le> q * metric x y"
+  assumes "x0 \<in> carrier"
+  shows "metric (iter (n+1) f x0) (iter n f x0) \<le> q^n * metric (f x0) x0"
+    (is "metric (?x (n+1)) (?x n) \<le> q^n * metric (f x0) x0")
+proof(induction n)
+      show "metric (?x (0 + 1)) (?x 0) \<le> q ^ 0 * metric (f x0) x0"
+      by auto
+  next
+    fix n
+    assume "metric (?x (n + 1)) (?x n) \<le> q ^ n * metric (f x0) x0"
+    hence IH:"q * (metric (?x (n + 1)) (?x n)) \<le> q * (q ^ n * metric (f x0) x0)"
+      using assms by (simp add: mult_left_mono)
+    have "iter (n + 1) f x0 \<in> carrier" and "iter n f x0 \<in> carrier"
+      using assms by (auto simp add: iter_closure)
+    hence "metric (f (?x(n + 1))) (f (?x n)) \<le> q * metric (?x(n + 1)) (?x n)"
+      using assms by (auto)
+    hence "metric (f (?x(n + 1))) (f (?x n)) \<le> q * q ^ n * metric (f x0) x0"
+      using IH by auto
+    thus "metric (?x (Suc n + 1)) (?x (Suc n)) \<le> q ^ Suc n * metric (f x0) x0"
+      by auto
+qed
+    
+lemma iter_inequality:
+  assumes "\<And>x. x \<in> carrier \<Longrightarrow> f x \<in> carrier" 
+  assumes "q\<ge>0" "q < 1" "\<forall>x\<in>carrier. \<forall>y\<in>carrier. metric (f x) (f y) \<le> q * metric x y"
+  assumes "x0 \<in> carrier"
+  assumes "m>n"
+  shows "metric (iter m f x0) (iter n f x0) \<le> (\<Sum>i\<in>{n..<m}. metric (iter (i+1) f x0) (iter i f x0))"
+      proof -
+      obtain d where "m = d + n"
+      proof
+        show "m = (m - n) + n"
+          using assms by (simp add: less_or_eq_imp_le)
+      qed
+      have "metric (iter (d+n) f x0) (iter n f x0) \<le> (\<Sum>i\<in>{n..<(d+n)}. metric (iter (i+1) f x0) (iter i f x0))"
+      proof(induction d)
+        show "metric (iter (0 + n) f x0) (iter n f x0) \<le> (\<Sum>i = n..<0 + n. metric (iter (i + 1) f x0) (iter i f x0))"
+        using assms by (metis (no_types, lifting) add.left_neutral add_le_same_cancel2 atLeastLessThan_empty discernible_metric empty_iff iter_closure le_0_eq sum_nonneg)
+      next
+        fix d
+        assume "metric (iter (d + n) f x0) (iter n f x0) \<le> (\<Sum>i = n..<d + n. metric (iter (i + 1) f x0) (iter i f x0))"
+        thus "metric (iter (Suc d + n) f x0) (iter n f x0) \<le> (\<Sum>i = n..<Suc d + n. metric (iter (i + 1) f x0) (iter i f x0))"
+          using assms by (smt Suc_eq_plus1 add_Suc add_less_same_cancel2 assms(1) diff_add_zero iter_closure le_add1 less_diff_conv less_imp_not_less nat_less_le subadditive_metric sum_op_ivl_Suc)
+      qed
+      thus "metric (iter m f x0) (iter n f x0) \<le> (\<Sum>i = n..<m. metric (iter (i + 1) f x0) (iter i f x0))"
+        using \<open>m = d + n\<close> by blast
+    qed
+
+lemma extract_sum:
+  fixes m n :: nat
+  assumes "m>n"
+  shows "(\<Sum>i\<in>{n..<m}. (f i) * q) = (\<Sum>i\<in>{n..<m}. (f i)) * q"
+  sorry
+    
+lemma sum_of_powers:
+  fixes m n :: nat
+  assumes "m>n"
+  shows "(\<Sum>i\<in>{n..<m}. q^i) = q^n*(\<Sum>i\<in>{0..<m-n}. q^i)"
+  sorry
+
+lemma 
+    
+lemma less_that_series:
+  fixes n :: nat
+  assumes "0\<le>q" and "0<1"
+  shows "(\<Sum>i\<in>{0..<m-n}. q^i) \<le> 1/(1-q)"
+  sorry
+    
+  
+lemma iter_cauchy:
+  assumes "\<And>x. x \<in> carrier \<Longrightarrow> f x \<in> carrier" 
+  assumes "q\<ge>0" "q < 1" "\<forall>x\<in>carrier. \<forall>y\<in>carrier. metric (f x) (f y) \<le> q * metric x y"
+  assumes "x0 \<in> carrier"
+  assumes "m>n"
+  shows "metric (iter m f x0) (iter n f x0) \<le> q^n * (metric (f x0) x0) * (\<Sum>i\<in>{0..<m-n}. q^i)"
+proof -
+   obtain d where "m = d + n"
+   proof
+     show "m = (m - n) + n"
+       using assms by (simp add: less_or_eq_imp_le)
+   qed
+     have "metric (iter m f x0) (iter n f x0) \<le> (\<Sum>i = n..<m. metric (iter (i + 1) f x0) (iter i f x0))"
+         using assms iter_inequality by force
+     have "metric (iter (d+n) f x0) (iter n f x0) \<le> (\<Sum>i\<in>{n..<(d+n)}. q^i * metric (f x0) x0)"
+     proof(induction d)
+       show "metric (iter (0 + n) f x0) (iter n f x0) \<le> (\<Sum>i = n..<0 + n. q ^ i * metric (f x0) x0)"
+         using assms by (metis (no_types, lifting) add.left_neutral atLeastLessThan_empty complete_metric_space.iter_closure complete_metric_space_axioms discernible_metric empty_iff le_eq_less_or_eq sum_nonneg)
+     next
+       fix d
+       assume "metric (iter (d + n) f x0) (iter n f x0) \<le> (\<Sum>i = n..<d + n. q ^ i * metric (f x0) x0)"
+       hence "metric (iter (Suc d + n) f x0) (iter (d + n) f x0) + metric ((iter (d + n) f x0)) (iter n f x0) 
+              \<le> (\<Sum>i = n..<d + n. q ^ i * metric (f x0) x0) + metric (iter (Suc d + n) f x0) (iter (d + n) f x0)"
+         by linarith
+       hence 1:"metric (iter (Suc d + n) f x0)  (iter n f x0) 
+              \<le> (\<Sum>i = n..<d + n. q ^ i * metric (f x0) x0) + metric (iter (Suc d + n) f x0) (iter (d + n) f x0)"
+         by (smt assms(1) assms(5) iter_closure subadditive_metric)
+       have "metric (iter (Suc d + n) f x0) (iter (d + n) f x0)  \<le> q^(d+n) * metric (f x0) x0"
+         using assms iter_collapse by force
+       hence "metric (iter (Suc d + n) f x0)  (iter n f x0) \<le>
+              (\<Sum>i = n..<d + n. q ^ i * metric (f x0) x0) + q^(d+n) * metric (f x0) x0"
+         using "1" by linarith
+       thus "metric (iter (Suc d + n) f x0)  (iter n f x0) \<le>  (\<Sum>i = n..<Suc d + n. q ^ i * metric (f x0) x0)"
+         by auto
+     qed
+     hence "metric (iter m f x0) (iter n f x0) \<le> (\<Sum>i\<in>{n..<m}. (q^i) * metric (f x0) x0)"
+       using \<open>m = d + n\<close> by blast
+     hence "metric (iter m f x0) (iter n f x0) \<le> (\<Sum>i\<in>{n..<m}. q^i) * metric (f x0) x0"
+       using assms by (metis extract_sum)
+     have "... = q^n * metric (f x0) x0 *(\<Sum>i\<in>{0..<(m-n)}. q^i)"
+       using assms(6) sum_of_powers by fastforce 
+     have "... = "
+   
+           
+
+         
+  
+    
+  
   
 theorem banach_fixed_point:
   assumes "\<And>x. x \<in> carrier \<Longrightarrow> f x \<in> carrier"
@@ -823,11 +916,39 @@ proof -
   hence "convergent (\<lambda>n. iter n f x0)"
   proof -
     fix m n :: nat
-    assume m:"m > 0"
-    hence 1:"metric (iter m f x0) (iter 0 f x0) \<le> (\<Sum>i\<in>{0..<m}. metric (iter (i+1) f x0) (iter i f x0))" 
-    proof(induct "m")
-      show "metric (iter 0 f x0) (iter 0 f x0) \<le> (\<Sum>i = 0..<0. metric (iter (i + 1) f x0) (iter i f x0))"
-        using discernible_metric x0 by fastforce
+    assume m:"m > n"
+    hence 1:"metric (iter m f x0) (iter n f x0) \<le> (\<Sum>i\<in>{n..<m}. metric (iter (i+1) f x0) (iter i f x0))" 
+    proof -
+      obtain d where "m = d + n"
+      proof
+        show "m = (m - n) + n"
+          by (simp add: less_or_eq_imp_le m)
+      qed
+      have "metric (iter (d+n) f x0) (iter n f x0) \<le> (\<Sum>i\<in>{n..<(d+n)}. metric (iter (i+1) f x0) (iter i f x0))"
+      proof(induction d)
+        show "metric (iter (0 + n) f x0) (iter n f x0) \<le> (\<Sum>i = n..<0 + n. metric (iter (i + 1) f x0) (iter i f x0))"
+        by (metis (no_types, lifting) add.left_neutral add_le_same_cancel2 assms(1) atLeastLessThan_empty discernible_metric empty_iff iter_closure le_0_eq sum_nonneg x0)
+      next
+        fix d
+        assume "metric (iter (d + n) f x0) (iter n f x0) \<le> (\<Sum>i = n..<d + n. metric (iter (i + 1) f x0) (iter i f x0))"
+        thus "metric (iter (Suc d + n) f x0) (iter n f x0) \<le> (\<Sum>i = n..<Suc d + n. metric (iter (i + 1) f x0) (iter i f x0))"
+          by (smt Suc_eq_plus1 add_Suc add_less_same_cancel2 assms(1) diff_add_zero iter_closure le_add1 less_diff_conv less_imp_not_less nat_less_le subadditive_metric sum_op_ivl_Suc x0)
+      qed
+      thus "metric (iter m f x0) (iter n f x0) \<le> (\<Sum>i = n..<m. metric (iter (i + 1) f x0) (iter i f x0))"
+        using \<open>m = d + n\<close> by blast
+    qed
+    
+    hence "... \<le> (\<Sum>i\<in>{n..<m}. q ^ i * metric (f x0) x0)"
+    proof -
+      obtain d where "m = d + n"
+      proof
+        show "m = (m - n) + n"
+          by (simp add: less_or_eq_imp_le m)
+      qed
+    
+      
+      
+ (*
     next
       fix m
       assume "0 < m \<Longrightarrow> metric (iter m f x0) (iter 0 f x0) \<le> (\<Sum>i = 0..<m. metric (iter (i + 1) f x0) (iter i f x0))"
@@ -841,6 +962,7 @@ proof -
       thus "metric (iter (Suc m) f x0) (iter 0 f x0) \<le> (\<Sum>i = 0..<Suc m. metric (iter (i + 1) f x0) (iter i f x0))"
         using 1 by auto
     qed
+     *)
        
   qed
     

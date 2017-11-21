@@ -2,6 +2,8 @@ import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
 
+import sys
+sys.path.append('../implementation')
 from pagerank_nibble import pagerank_nibble, conductance
 
 CLUSTER_A_SIZE = 300
@@ -53,7 +55,7 @@ def generate_random_clustered_graph(beta):
 accuracys = []
 ratios = []
 sizes = []
-betas = np.arange(0.01, 0.1, 0.025)
+betas = np.arange(0.01, 0.11, 0.025)
 for beta in betas:
     debug("running with beta: %s" % beta)
 
@@ -61,7 +63,7 @@ for beta in betas:
     starting_vertex = np.random.randint(0, CLUSTER_A_SIZE)
 
     
-    nodes, cond = pagerank_nibble(graph, starting_vertex, 0.01, 90000) 
+    nodes, cond = pagerank_nibble(graph, starting_vertex, 0.1*beta, 90000) 
     accuracys.append(len([node for node in nodes if node < CLUSTER_A_SIZE])/len(nodes))
     sizes.append(len(nodes))
     ratios.append(cond/conductance(graph, [i for i in range(CLUSTER_A_SIZE)]))

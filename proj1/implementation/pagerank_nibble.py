@@ -56,10 +56,8 @@ def aproximate_pagerank(graph, starting_vector, prob_teleport, aprox_ratio):
         p_vector[node] += prob_teleport * r_vector[node]
 
         non_negative_p.add(node)
-
         for adj_node in graph[node].keys():
             r_vector[adj_node] +=  (1 - prob_teleport) * r_vector[node] / (2*graph.degree(node))
-
             queue.updateitem(adj_node, r_vector[adj_node] - aprox_ratio * graph.degree(adj_node))
 
         r_vector[node] = (1 - prob_teleport) * r_vector[node] / 2

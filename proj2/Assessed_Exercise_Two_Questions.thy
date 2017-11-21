@@ -309,15 +309,14 @@ proof(simp add:continuous_def continuous_at_def, safe)
     using assms by auto
   hence "\<exists>d>0. \<forall>fx\<in>inters. metric_i fx (f x1) < d \<longrightarrow> metric_c (g fx) (g (f x1)) < \<epsilon>"
     using 1 assms by (auto simp add:continuous_def continuous_at_def)
-  then obtain k::real where 4:"k>0" 
-              and 5:"\<forall>x2\<in>domain. metric_i (f x2) (f x1) < k \<longrightarrow> metric_c (g (f x2)) (g (f x1)) < \<epsilon>"
-    using assms by blast
+  then obtain k::real 
+           where 4:"k>0" 
+             and 5:"\<forall>x2\<in>domain. metric_i (f x2) (f x1) < k \<longrightarrow> metric_c (g (f x2)) (g (f x1)) < \<epsilon>"
+    using 1 assms by (auto simp add:continuous_def continuous_at_def)
    
-  have "\<exists>d>0. \<forall>x2\<in>domain. metric_d x2 x1 < d \<longrightarrow> metric_i (f x2) (f x1) < k"
-    using 2 4 assms by (auto simp add:continuous_def continuous_at_def)
-  then obtain d::real where 6:"d>0"
-                and 7:"\<forall>x2\<in>domain. metric_d x2 x1 < d \<longrightarrow> metric_i (f x2) (f x1) < k"
-    by auto
+  obtain d::real where 6:"d>0"
+                   and 7:"\<forall>x2\<in>domain. metric_d x2 x1 < d \<longrightarrow> metric_i (f x2) (f x1) < k"
+    using 2 4 assms by (metis continuous_def continuous_at_def)
   fix x2
   assume x2:"x2 \<in> domain"
   {
@@ -464,10 +463,10 @@ proof(unfold is_limit_def, unfold o_def, standard, rule impI)
   then obtain p where p:"\<forall>n\<ge>p. metric (seq n) l < d"
     by auto
   {
-  fix n :: nat
-  assume n:"n\<ge>p"
-  have "metric (f (seq n)) (f l) < \<epsilon>"
-    using assms(2) d(2) n p by auto
+    fix n :: nat
+    assume n:"n\<ge>p"
+    have "metric (f (seq n)) (f l) < \<epsilon>"
+      using assms(2) d(2) n p by auto
   }
   thus "\<exists>p. \<forall>n\<ge>p. metric (f (seq n)) (f l) < \<epsilon>"
     by blast
@@ -558,7 +557,27 @@ qed
 end
 
 section\<open>Complete Metric Spaces and Banach Fixed Point Theorem\<close>
-  
+    
+lemma sum_of_powers:
+  fixes m n :: nat
+  fixes q :: real
+  assumes "m>n" "q \<ge> 0"
+  shows "(\<Sum>i\<in>{n..<m}. q^i) = q^n*(\<Sum>i\<in>{0..<m-n}. q^i)"
+  sorry
+       
+lemma less_than_series:
+  fixes n m :: nat
+  assumes "0\<le>q" and "q<1"
+    and "m>n"
+  shows "(\<Sum>i\<in>{0..<m-n}. q^i) \<le> 1/(1-q)"
+  sorry
+    
+lemma collapsing_exponential:
+  assumes "q \<ge> 0" and "q < 1"
+  and "r > 0"
+  shows "\<exists>p. q^p < r"
+  sorry
+    
 locale complete_metric_space = metric_space +
   assumes completness: "\<forall>seq::(nat\<Rightarrow>'a). cauchy seq \<longrightarrow> convergent seq"
 
@@ -602,31 +621,6 @@ qed
 fun iter ::  "nat \<Rightarrow> ('a \<Rightarrow> 'a) \<Rightarrow> 'a \<Rightarrow> 'a" where 
   "iter 0 f x = x" |
   "iter n f x = f (iter (n-1) f x)"
-  
-lemma extract_sum:
-  fixes m n :: nat
-  assumes "m>n"
-  shows "(\<Sum>i\<in>{n..<m}. (f i) * q) = (\<Sum>i\<in>{n..<m}. (f i)) * q"
-  sorry
-    
-lemma sum_of_powers:
-  fixes m n :: nat
-  assumes "m>n"
-  shows "(\<Sum>i\<in>{n..<m}. q^i) = q^n*(\<Sum>i\<in>{0..<m-n}. q^i)"
-  sorry
-    
-lemma less_than_series:
-  fixes n m :: nat
-  assumes "0\<le>q" and "q<1"
-    and "m>n"
-  shows "(\<Sum>i\<in>{0..<m-n}. q^i) \<le> 1/(1-q)"
-  sorry
-    
-lemma existence:
-  assumes "q \<ge> 0" and "q < 1"
-  and "r > 0"
-  shows "\<exists>p. q^p < r"
-  sorry
     
 lemma iter_closure:
   assumes "\<And>x. x \<in> carrier \<Longrightarrow> f x \<in> carrier" and "x0 \<in> carrier"
@@ -704,7 +698,7 @@ proof(unfold cauchy_def, safe)
   hence a:"\<epsilon> * (1 - q) / (metric (f x0) x0) > 0"
     using assms by (metis diff_gt_0_iff_gt discernible_metric divide_pos_pos less_eq_real_def mult_pos_pos non_negative_metric)
   then obtain p::nat where p:"q^p < \<epsilon> * (1 - q) / (metric (f x0) x0)"
-    using assms existence by blast
+    using assms collapsing_exponential by blast
   {
   fix m n :: nat
   assume "m>p" "n>p" and 1:"m>n"
@@ -741,9 +735,9 @@ proof(unfold cauchy_def, safe)
    hence "metric (iter m f x0) (iter n f x0) \<le> (\<Sum>i\<in>{n..<m}. (q^i) * metric (f x0) x0)"
      using \<open>m = d + n\<close> by blast
    hence 2:"metric (iter m f x0) (iter n f x0) \<le> (\<Sum>i\<in>{n..<m}. q^i) * metric (f x0) x0"
-     using assms 1 by (metis extract_sum)
+     using assms 1 by (metis  sum_distrib_right)
    have 3:"... = q^n * metric (f x0) x0 * (\<Sum>i\<in>{0..<(m-n)}. q^i)"
-     using assms sum_of_powers 1 by fastforce 
+     using assms sum_of_powers 1 by (metis mult.assoc mult.commute) 
    have 4:"... \<le> q^n * metric (f x0) x0 * (1/(1-q))"
      using assms 1 by (meson less_than_series mult_left_mono mult_nonneg_nonneg non_negative_metric zero_le_power)
        
@@ -810,6 +804,7 @@ qed
 
 end
 
+end
 text\<open>
 \begin{center}
 \emph{The end\ldots}

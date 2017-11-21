@@ -9,7 +9,13 @@ CLUSTER_A_MEAN_DEGREE = 60
 CLUSTER_B_SIZE = 20
 CLUSTER_C_SIZE = 550
 
-def generate_random_graph(beta):
+DEBUG = True
+
+def debug(message):
+    if DEBUG:
+        print(message)
+
+def generate_random_clustered_graph(beta):
     cluster_A = nx.watts_strogatz_graph(CLUSTER_A_SIZE, CLUSTER_A_MEAN_DEGREE, beta)
     cluster_B = nx.empty_graph(CLUSTER_B_SIZE)
     cluster_C = nx.empty_graph(CLUSTER_C_SIZE)
@@ -42,18 +48,29 @@ def generate_random_graph(beta):
     return graph
 
 
-graph = generate_random_graph(0.05)
-starting_vertex = np.random.randint(0, CLUSTER_A_SIZE)
-prob = 0.01
-volume = 0
-for i in range(CLUSTER_A_SIZE):
-    volume += graph.degree(i)
 
-print(volume)
-nodes, cond = pagerank_nibble(graph, starting_vertex, prob, 10000) 
 
-print(len(nodes))
-print("Cluster Accuracy:", len([node for node in nodes if node < CLUSTER_A_SIZE])/len(nodes))
-print("Cluster Ratio:", cond/conductance(graph, [i for i in range(CLUSTER_A_SIZE)]))
-print(cond, conductance(graph, [i for i in range(CLUSTER_A_SIZE)]))
+accuracys = []
+ratios = []
+sizes = []
+betas = np.arange(0.01, 0.1, 0.025)
+for beta in betas:
+    debug("running with beta: %s" % beta)
 
+    graph = generate_random_clustered_graph(beta)
+    starting_vertex = np.random.randint(0, CLUSTER_A_SIZE)
+
+    
+    nodes, cond = pagerank_nibble(graph, starting_vertex, 0.01, 90000) 
+    accuracys.append(len([node for node in nodes if node < CLUSTER_A_SIZE])/len(nodes))
+    sizes.append(len(nodes))
+    ratios.append(cond/conductance(graph, [i for i in range(CLUSTER_A_SIZE)]))
+
+plt.figure(1)
+plt.plot(betas, accuracys)
+plt.show()
+plt.figure(2)
+plt.plot(betas, ratios)
+plt.show()
+
+print(sizes)

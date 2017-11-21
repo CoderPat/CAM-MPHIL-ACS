@@ -36,6 +36,9 @@ def conductance(graph, node_set):
         volume += graph.degree(node)
         boundary += len([adj_node for adj_node in graph[node].keys() if adj_node not in node_set])
 
+    if(min(volume, 2*graph.number_of_edges() - volume) == 0):
+        return float("+inf")
+    
     return boundary/(min(volume, 2*graph.number_of_edges() - volume))
 
 

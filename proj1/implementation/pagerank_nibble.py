@@ -19,7 +19,6 @@ def pagerank_nibble(graph, initial_vertex, connectivity, volume):
     optimal_conductance = float("+inf")
     for i, node in enumerate(support_nodes):
         if pagerank_vector[node] < (1/8) * graph.degree(node) / volume:
-            print(i)
             break
             
         cond = conductance(graph, support_nodes[:i+1])

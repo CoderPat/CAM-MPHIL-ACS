@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 import sys
 sys.path.append('implementation')
-from pagerank_nibble import pagerank_nibble, conductance
+from pagerank_nibble import pagerank_nibble
 
 CLUSTER_A_SIZE = 300
 CLUSTER_A_MEAN_DEGREE = 60
@@ -18,6 +18,11 @@ def debug(message):
         print(message)
 
 def generate_random_clustered_graph(beta):
+    '''
+    Generates a random graph according to the description in the paper.
+
+    
+    '''
     cluster_A = nx.watts_strogatz_graph(CLUSTER_A_SIZE, CLUSTER_A_MEAN_DEGREE, beta)
     cluster_B = nx.empty_graph(CLUSTER_B_SIZE)
     cluster_C = nx.empty_graph(CLUSTER_C_SIZE)
@@ -60,10 +65,11 @@ for beta in betas:
     debug("running with beta: %s" % beta)
     graph = generate_random_clustered_graph(beta)
     starting_vertex = np.random.randint(0, CLUSTER_A_SIZE)
-    nodes, cond = pagerank_nibble(graph, starting_vertex, 0.1*beta, 10000) 
+    nodes, cond = pagerank_nibble(graph, starting_vertex, 0.005, 10000)
+    print(len(nodes), cond) 
+    
     accuracys.append(len([node for node in nodes if node < CLUSTER_A_SIZE])/len(nodes))
-    sizes.append(len(nodes))
-    ratios.append(cond/conductance(graph, [i for i in range(CLUSTER_A_SIZE)]))
+    ratios.append(cond/nx.conductance(graph, [i for i in range(CLUSTER_A_SIZE)]))
 
 plt.figure(1)
 plt.plot(betas, accuracys)

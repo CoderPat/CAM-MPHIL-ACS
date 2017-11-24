@@ -56,26 +56,43 @@ def generate_random_clustered_graph(beta):
 
 
 
-
+#Test for variations in beta with fixed alpha
 accuracys = []
 ratios = []
 sizes = []
 betas = np.arange(0.01, 0.11, 0.01)
 for beta in betas:
     debug("running with beta: %s" % beta)
+
     graph = generate_random_clustered_graph(beta)
     starting_vertex = np.random.randint(0, CLUSTER_A_SIZE)
     nodes, cond = pagerank_nibble(graph, starting_vertex, 0.005, 10000)
-    print(len(nodes), cond) 
     
     accuracys.append(len([node for node in nodes if node < CLUSTER_A_SIZE])/len(nodes))
     ratios.append(cond/nx.conductance(graph, [i for i in range(CLUSTER_A_SIZE)]))
 
 plt.figure(1)
 plt.plot(betas, accuracys)
-plt.show()
 plt.figure(2)
 plt.plot(betas, ratios)
 plt.show()
 
-print(sizes)
+#Tests for variations in alpha with fixed beta
+accuracys = []
+ratios = []
+sizes = []
+alphas = np.arange(0.001, 0.031, 0.005)
+graph = generate_random_clustered_graph(beta)
+for alpha in alphas:
+    debug("running with alpha: %s" % alpha)
+    starting_vertex = np.random.randint(0, CLUSTER_A_SIZE)
+    nodes, cond = pagerank_nibble(graph, starting_vertex, alpha, 10000)
+    
+    accuracys.append(len([node for node in nodes if node < CLUSTER_A_SIZE])/len(nodes))
+    ratios.append(cond/nx.conductance(graph, [i for i in range(CLUSTER_A_SIZE)]))
+
+plt.figure(1)
+plt.plot(alphas, accuracys)
+plt.figure(2)
+plt.plot(alphas, ratios)
+plt.show()

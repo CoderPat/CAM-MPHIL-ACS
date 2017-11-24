@@ -7,6 +7,12 @@ import sys
 sys.path.append('implementation')
 from pagerank_nibble import pagerank_nibble
 
+DEBUG = True
+
+def debug(message):
+    if DEBUG:
+        print(message)
+
 #Extracts a networkx graph from a file
 def get_graph(path):
     graph = nx.read_edgelist(path)
@@ -33,13 +39,13 @@ def get_cluster_communities(node_list, communities):
 graph = get_graph("experiments/com-amazon.ungraph.txt")
 communities =  get_communities("experiments/com-amazon.all.dedup.cmty.txt")
 
-starting_vertex = 9649 #np.random.randint(0, graph.number_of_nodes())
-nodes, cond = pagerank_nibble(graph, starting_vertex, 0.01, 2000)
-print(len(nodes), cond)
+starting_vertex = np.random.randint(0, graph.number_of_nodes())
 
-cluster_communities = get_cluster_communities(nodes, communities)
-cluster_communities = sorted(cluster_communities.values(), reverse=True)
-
-for cluster in cluster_communities:
-    print(cluster/len(nodes))
+volumes = [100, 1000, 10000, 100000]
+for volume in volumes:
+    debug("running with volume: %s" % volume)
+    nodes, cond = pagerank_nibble(graph, starting_vertex, 0.01, volume)
+    cluster_communities = get_cluster_communities(nodes, communities)
+    cluster_communities = sorted(cluster_communities.values(), reverse=True)
+    print(len(nodes), cluster_communities[0]/len(nodes), cluster_communities[1]/len(nodes), cluster_communities[2]/len(nodes))
 

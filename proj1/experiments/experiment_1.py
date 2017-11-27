@@ -71,11 +71,12 @@ for beta in betas:
     accuracys.append(len([node for node in nodes if node < CLUSTER_A_SIZE])/len(nodes))
     ratios.append(cond/nx.conductance(graph, [i for i in range(CLUSTER_A_SIZE)]))
 
-plt.figure(1)
-plt.plot(betas, accuracys)
-plt.figure(2)
+plt.plot(betas, accuracys, color='red')
+plt.savefig("betas-accuracy.png")
+plt.clf()
 plt.plot(betas, ratios)
-plt.show()
+plt.savefig("betas-ratio.png")
+plt.clf()
 
 #Tests for variations in alpha with fixed beta
 accuracys = []
@@ -91,8 +92,9 @@ for alpha in alphas:
     accuracys.append(len([node for node in nodes if node < CLUSTER_A_SIZE])/len(nodes))
     ratios.append(cond/nx.conductance(graph, [i for i in range(CLUSTER_A_SIZE)]))
 
-plt.figure(1)
-plt.plot(alphas, accuracys)
-plt.figure(2)
+plt.plot(alphas, accuracys, color='red')
+plt.savefig("alphas-accuracy.png")
+plt.clf()
 plt.plot(alphas, ratios)
-plt.show()
+plt.savefig("alphas-ratio.png")
+plt.clf()

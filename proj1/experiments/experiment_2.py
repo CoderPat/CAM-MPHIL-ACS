@@ -47,5 +47,5 @@ for volume in volumes:
     nodes, cond = pagerank_nibble(graph, starting_vertex, 0.01, volume)
     cluster_communities = get_cluster_communities(nodes, communities)
     cluster_communities = sorted(cluster_communities.values(), reverse=True)
-    print(len(nodes), cluster_communities[0]/len(nodes), cluster_communities[1]/len(nodes), cluster_communities[2]/len(nodes))
+    print(len(nodes), cond, cluster_communities[0]/len(nodes), cluster_communities[1]/len(nodes), cluster_communities[2]/len(nodes))
 

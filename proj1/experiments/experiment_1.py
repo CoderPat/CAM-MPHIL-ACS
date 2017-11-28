@@ -56,45 +56,88 @@ def generate_random_clustered_graph(beta):
 
 
 
+"""
 #Test for variations in beta with fixed alpha
-accuracys = []
-ratios = []
-sizes = []
 betas = np.arange(0.01, 0.11, 0.01)
-for beta in betas:
-    debug("running with beta: %s" % beta)
+tot_accuracies = []
+tot_ratios = []
+for _ in range(10):
+    accuracies = []
+    ratios = []
+    for beta in betas:
+        debug("running with beta: %s" % beta)
 
-    graph = generate_random_clustered_graph(beta)
-    starting_vertex = np.random.randint(0, CLUSTER_A_SIZE)
-    nodes, cond = pagerank_nibble(graph, starting_vertex, 0.005, 10000)
+        graph = generate_random_clustered_graph(beta)
+        starting_vertex = np.random.randint(0, CLUSTER_A_SIZE)
+        nodes, cond = pagerank_nibble(graph, starting_vertex, 0.005, 10000)
     
-    accuracys.append(len([node for node in nodes if node < CLUSTER_A_SIZE])/len(nodes))
-    ratios.append(cond/nx.conductance(graph, [i for i in range(CLUSTER_A_SIZE)]))
+        accuracies.append(len([node for node in nodes if node < CLUSTER_A_SIZE])/len(nodes))
+        ratios.append(cond/nx.conductance(graph, [i for i in range(CLUSTER_A_SIZE)]))
+    tot_accuracies.append(accuracies)
+    tot_ratios.append(ratios)
 
-plt.plot(betas, accuracys, color='red')
+accuracies = np.mean(np.array(tot_accuracies), axis=0)
+ratios = np.mean(np.array(tot_ratios), axis=0)
+
+plt.plot(betas, accuracies, color='red')
 plt.savefig("betas-accuracy.png")
 plt.clf()
 plt.plot(betas, ratios)
 plt.savefig("betas-ratio.png")
 plt.clf()
+"""
 
-#Tests for variations in alpha with fixed beta
-accuracys = []
-ratios = []
-sizes = []
-alphas = np.arange(0.001, 0.031, 0.005)
-graph = generate_random_clustered_graph(beta)
-for alpha in alphas:
-    debug("running with alpha: %s" % alpha)
-    starting_vertex = np.random.randint(0, CLUSTER_A_SIZE)
-    nodes, cond = pagerank_nibble(graph, starting_vertex, alpha, 10000)
+#Tests for variations in starting vertex
+accuracies1 = []
+accuracies2 = []
+ratios1 = []
+ratios2 = []
+for _ in range(10):
+    print("a")
+    graph = generate_random_clustered_graph(0.05)
+    max_outer_edges = 0
+    max_inner_edges = 0
+    for node in range(CLUSTER_A_SIZE):
+        inner_edges = 0
+        outer_edges = 0
+        for adj_node in graph[node].keys():
+            if adj_node < CLUSTER_A_SIZE:
+                 inner_edges += 1
+            else:
+                outer_edges += 1
+        if inner_edges > max_inner_edges:
+            max_inner_edges = inner_edges
+            inner_node = node
+        if outer_edges > max_outer_edges:
+            max_outer_edges = outer_edges
+            outer_node = node
+
+    nodes1, cond1 = pagerank_nibble(graph, inner_node, 0.005, 10000)
+    nodes2, cond2 = pagerank_nibble(graph, outer_node, 0.005, 10000)
+
+    accuracies1.append(len([node for node in nodes1 if node < CLUSTER_A_SIZE])/len(nodes1))
+    ratios1.append(cond1/nx.conductance(graph, [i for i in range(CLUSTER_A_SIZE)]))
+        
+    accuracies2.append(len([node for node in nodes2 if node < CLUSTER_A_SIZE])/len(nodes2))
+    ratios2.append(cond2/nx.conductance(graph, [i for i in range(CLUSTER_A_SIZE)]))
+
+accuracy1 = np.mean(np.array(accuracies1))
+ratio1 = np.mean(np.array(ratios1))
+
+accuracy2 = np.mean(np.array(accuracies2))
+ratio2 = np.mean(np.array(ratios2))
+
+ind = np.arange(1, 3)
+
+plt.bar(ind, (accuracy1, accuracy2), 0.5)
+plt.savefig("vertex-accuracy.png")
+plt.clf()
+
+plt.bar(ind, (ratio1, ratio2), 0.5, color='red')
+plt.savefig("vertex-ratio.png")
+plt.clf()
     
-    accuracys.append(len([node for node in nodes if node < CLUSTER_A_SIZE])/len(nodes))
-    ratios.append(cond/nx.conductance(graph, [i for i in range(CLUSTER_A_SIZE)]))
 
-plt.plot(alphas, accuracys, color='red')
-plt.savefig("alphas-accuracy.png")
-plt.clf()
-plt.plot(alphas, ratios)
-plt.savefig("alphas-ratio.png")
-plt.clf()
+
+    
+

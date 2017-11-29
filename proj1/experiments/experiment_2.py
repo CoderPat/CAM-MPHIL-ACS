@@ -8,11 +8,10 @@ import sys
 sys.path.append('implementation')
 from pagerank_nibble import pagerank_nibble
 
-DEBUG = True
 
-def debug(message):
-    if DEBUG:
-        print(message)
+"""
+This experimental setting is based on the Amazon co-product data introduced by https://arxiv.org/abs/1205.6233
+"""
 
 #Extracts a networkx graph from a file
 def get_graph(path):
@@ -37,28 +36,30 @@ def get_cluster_communities(node_list, communities):
     return cluster_communities
 
 
-graph = get_graph("experiments/com-amazon.ungraph.txt")
-communities =  get_communities("experiments/com-amazon.all.dedup.cmty.txt")
+if __name__ == "__main__":
+    graph = get_graph("experiments/com-amazon.ungraph.txt")
+    communities =  get_communities("experiments/com-amazon.all.dedup.cmty.txt")
 
-volumes = [100, 1000, 10000]
-tot_data = []
-for _ in range(5):
-    data = []
-    starting_vertex = np.random.randint(0, graph.number_of_nodes())
-    for volume in volumes:
-        debug("running with volume: %s" % volume)
-        start = time.time()
-        nodes, cond = pagerank_nibble(graph, starting_vertex, 0.01, volume)
-        end = time.time()    
-        cluster_communities = get_cluster_communities(nodes, communities)
-        cluster_communities_list = sorted(cluster_communities.values(), reverse=True)
-        cluster_communities = defaultdict(lambda: 0)
-        for i, value in enumerate(cluster_communities_list):
-            cluster_communities[i] = value
-        
-        data.append((end-start,len(nodes), cond, cluster_communities[0]/len(nodes), cluster_communities[1]/len(nodes), cluster_communities[2]/len(nodes)))
-    tot_data.append(data)
+    volumes = [100, 1000, 10000]
+    tot_data = []
+    for _ in range(10):
+        data = []
+        starting_vertex = np.random.randint(0, graph.number_of_nodes())
+        for volume in volumes:
+            debug("running with volume: %s" % volume)
+            start = time.time()
+            nodes, cond = pagerank_nibble(graph, starting_vertex, 0.01, volume)
+            end = time.time()
 
-np.set_printoptions(suppress=True)
-print(np.mean(np.array(tot_data), axis=0))
+            cluster_communities = get_cluster_communities(nodes, communities)
+            cluster_communities_list = sorted(cluster_communities.values(), reverse=True)
+            cluster_communities = defaultdict(lambda: 0)
+            for i, value in enumerate(cluster_communities_list):
+                cluster_communities[i] = value
+            
+            data.append((end-start,len(nodes), cond, cluster_communities[0]/len(nodes), cluster_communities[1]/len(nodes), cluster_communities[2]/len(nodes)))
+        tot_data.append(data)
+
+    np.set_printoptions(suppress=True)
+    print(np.mean(np.array(tot_data), axis=0))
     

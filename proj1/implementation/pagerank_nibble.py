@@ -4,11 +4,19 @@ import numpy as np
 from collections import defaultdict
 from pqdict import pqdict
 
-def pagerank_nibble(graph, initial_vertex, connectivity, target_volume):
-    """
-    """
-    alpha = connectivity
+def pagerank_nibble(graph, initial_vertex, alpha, target_volume):
+    """ An local clustering algorithm based on the paper https://arxiv.org/abs/1304.8132
 
+    Args:
+        graph (NetworkX graph) : the graph where we want to cluster
+        initial_vertex (int) : a node situated in the objective cluster
+        connectivity (float) : an estimate of the internal connectivity of the objective cluster
+        target_volume (int) : an estimate of the volume of the objective cluster
+
+    Returns:
+        list int : the list of the nodes in the computed cluster
+        int : the conductance of the computed cluster
+    """
     indicator_vector = defaultdict(lambda: 0)
     indicator_vector[initial_vertex] = 1
 
@@ -51,6 +59,17 @@ def pagerank_nibble(graph, initial_vertex, connectivity, target_volume):
 
 
 def aproximate_pagerank(graph, starting_vector, prob_teleport, aprox_ratio):
+    """ An algorithm to calculate the e-aproximate pagerank vector, as formulated in https://arxiv.org/abs/1304.8132
+    
+    Args:
+        graph (NetworkX graph) : the graph where we want to cluster
+        starting_vector ((int, float) defaultdict): a (lazy) vector of the initial distribution of the nodes
+        prob_teleport (float) : the teleport probability (informally the probability of randomly going back to the origin)
+        aprox_ration (float) : an estimate of the volume of the objective cluster
+
+    Returns:
+        (int, float) defaultdict  : the aproximate pagerank (lazy) vector
+    """
     #A "lazy vector" is used to avoid having to initialize a full vector, which would be linear in the graph size
     p_vector = defaultdict(lambda: 0)
     r_vector = starting_vector

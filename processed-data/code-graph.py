@@ -1,5 +1,6 @@
 from ast import *
 from collections import defaultdict
+import gc
 
 import networkx as nx
 from networkx.drawing.nx_agraph import write_dot
@@ -80,9 +81,9 @@ class AstGraphGenerator(NodeVisitor):
 
     def __add_edge(self, node, label=None, repr=None):
         if repr is None:
-            repr = np.zeros(50)
+            repr = -1
 
-        self.representations.append(repr.tolist())
+        self.representations.append(repr)
         nid = self.__generate_id()
         self.node_label[nid] = label
         if self.parent is not None:
@@ -103,9 +104,7 @@ class AstGraphGenerator(NodeVisitor):
         self.previous_token = nid
 
     def non_terminal(self, node, idx):
-        initial_rep = np.zeros(50)
-        initial_rep[idx] = 1
-        nid = self.__add_edge(self.parent, node.__class__.__name__, initial_rep)
+        nid = self.__add_edge(self.parent, node.__class__.__name__, idx)
         return nid
 
     def body(self, statements):
@@ -709,8 +708,38 @@ class AstGraphGenerator(NodeVisitor):
         self.parent = gparent
     
         
+import sys
+from numbers import Number
+from collections import Set, Mapping, deque
 
+try: # Python 2
+    zero_depth_bases = (basestring, Number, xrange, bytearray)
+    iteritems = 'iteritems'
+except NameError: # Python 3
+    zero_depth_bases = (str, bytes, Number, range, bytearray)
+    iteritems = 'items'
 
+def getsize(obj_0):
+    """Recursively iterate to sum size of object & members."""
+    def inner(obj, _seen_ids = set()):
+        obj_id = id(obj)
+        if obj_id in _seen_ids:
+            return 0
+        _seen_ids.add(obj_id)
+        size = sys.getsizeof(obj)
+        if isinstance(obj, zero_depth_bases):
+            pass # bypass remaining control flow and return
+        elif isinstance(obj, (tuple, list, Set, deque)):
+            size += sum(inner(i) for i in obj)
+        elif isinstance(obj, Mapping) or hasattr(obj, iteritems):
+            size += sum(inner(k) + inner(v) for k, v in getattr(obj, iteritems)())
+        # Check for custom object instances - may subclass above too
+        if hasattr(obj, '__dict__'):
+            size += inner(vars(obj))
+        if hasattr(obj, '__slots__'): # can have __slots__ with __dict__
+            size += sum(inner(getattr(obj, s)) for s in obj.__slots__ if hasattr(obj, s))
+        return size
+    return inner(obj_0)
 if __name__ == "__main__":
     
     with open("./data/V2/repo_split/repo_split.parallel_methods_bodies.valid") as f:
@@ -725,6 +754,7 @@ if __name__ == "__main__":
 
     data = []
     num_inits = 0
+    bodies, decls = bodies[:200000], decls[:200000]
     for idx, (body, decl) in enumerate(zip(bodies, decls)):
         try:
             visitor = AstGraphGenerator() 
@@ -736,6 +766,9 @@ if __name__ == "__main__":
             data.append({"graph":edge_list, "node_features":node_features, "label":label})
         except:
             errors += 1
+        if (idx % 2000) == 0:
+            print(idx)
+
 
     new_data = []
     for graph_data in data:

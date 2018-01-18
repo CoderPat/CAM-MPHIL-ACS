@@ -26,6 +26,7 @@ import threading
 import sys, traceback
 import pdb
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 
 SMALL_NUMBER = 1e-7
 
@@ -46,15 +47,15 @@ def load_data(file_name, data_dir, task_id, restrict=-1, tie_fwd_bkwd=True) -> T
     if restrict > 0:
         data = data[:restrict]
 
-    x_dim = len(data[0]["node_features"][0])
+    x_dim = 51 # len(data[0]["node_features"][0])
 
     processed_graphs = []
     for d in data:
         (adjacency_lists, num_incoming_edge_per_type) = graph_to_adjacency_lists(d['graph'], len(d["node_features"]), tie_fwd_bkwd)
         processed_graphs.append(PreprocessedGraph(adjacency_lists=adjacency_lists,
                                                   num_incoming_edge_per_type=num_incoming_edge_per_type,
-                                                  init=d["node_features"],
-                                                  label=d["label"]))
+                                                  init=np.eye(51)[np.array(d["node_features"])],
+                                                  label=np.eye(2)[int(d["label"])]))
 
     return processed_graphs, x_dim
 
@@ -208,7 +209,7 @@ class SparseGGNN:
 class ChemGNN:
     def __init__(self, params):
         self.__node_features = tf.placeholder(tf.float32, [None, params['hidden_size']], name='node_features')
-        self.__target_values = tf.placeholder(tf.float32, [None], name='targets')
+        self.__target_values = tf.placeholder(tf.float32, [None, params['classes']], name='targets')
         self.__num_graphs = tf.placeholder(tf.int64, [], name='num_graphs')
         self.__dropout_keep_prob = tf.placeholder(tf.float32, [], name='dropout_keep_prob')
 
@@ -221,8 +222,8 @@ class ChemGNN:
 
         self.__graph_nodes_list = tf.placeholder(tf.int64, [None, 2], name='graph_nodes_list')
 
-        self.__regression_gate = MLP(2 * params['hidden_size'], 1, [], self.__dropout_keep_prob)
-        self.__regression_transform = MLP(params['hidden_size'], 1, [], self.__dropout_keep_prob)
+        self.__regression_gate = MLP(2 * params['hidden_size'], params['classes'], [20], self.__dropout_keep_prob)
+        self.__regression_transform = MLP(params['hidden_size'], params['classes'], [20], self.__dropout_keep_prob)
 
         self.__loss, self.__accuracy = self.get_loss()
 
@@ -273,27 +274,31 @@ class ChemGNN:
     def accuracy(self):
         return self.__accuracy
 
+
     def gated_regression(self, last_h):
         # last_h: [v x h]
         gate_input = tf.concat([last_h, self.__node_features], axis=-1)  # [v x 2h]
 
-        gated_outputs = tf.nn.sigmoid(self.__regression_gate(gate_input)) * self.__regression_transform(last_h)  # [v x 1]
+        gated_outputs = tf.nn.sigmoid(self.__regression_gate(gate_input)) * self.__regression_transform(last_h)  # [v x c]
 
         # Sum up all nodes per-graph
         num_nodes = tf.shape(gate_input, out_type=tf.int64)[0]
         graph_nodes = tf.SparseTensor(indices=self.__graph_nodes_list,
                                       values=tf.ones_like(self.__graph_nodes_list[:, 0], dtype=tf.float32),
                                       dense_shape=[self.__num_graphs, num_nodes])  # [g x v]
-        return tf.squeeze(tf.sparse_tensor_dense_matmul(graph_nodes, gated_outputs), axis=[-1])  # [g]
+        return tf.sparse_tensor_dense_matmul(graph_nodes, gated_outputs) # [g c]
 
     def get_loss(self):
         node_representations = self.__gnn.sparse_gnn_layer(self.__node_features,
                                                            self.__adjacency_lists,
                                                            self.__num_incoming_edges_per_type)
-        computed_representations = self.gated_regression(node_representations)
-        diff = computed_representations - self.__target_values
-        loss = tf.reduce_mean(0.5 * (diff) ** 2)
-        accuracy = 1 - tf.reduce_mean(tf.abs(diff))
+        computed_logits = self.gated_regression(node_representations)
+        cross_entropies = tf.reduce_mean(
+                            tf.nn.softmax_cross_entropy_with_logits(labels=self.__target_values,
+                                                                    logits=computed_logits))
+        loss = tf.reduce_mean(cross_entropies)
+        correct_prediction = tf.equal(tf.argmax(computed_logits,1), tf.argmax(self.__target_values,1))
+        accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
         return loss, accuracy
 
 
@@ -334,7 +339,7 @@ class MLP(object):
 ########################################################################################
 def default_params():
     return {
-        'batch_size': 10000,
+        'batch_size': 60000,
         'clamp_gradient_norm': 1.0,
         'optimizer': 'adam', # adam or fixed
         'hidden_size': 100,
@@ -343,13 +348,14 @@ def default_params():
         'tie_gnn_layers': True,
         'graph_rnn_cell': 'GRU',  # GRU or RNN
         'graph_rnn_activation': 'tanh',  # tanh, ReLU
-        'unrolling_steps': 4,
+        'unrolling_steps': 7,
         'out': 'log.json',
         'task_id': 0,
         'restrict_data': -1,
         'do_validation': True,
         'dropout_keep_prob': 1.0,
         'tie_fwd_bkwd': True,
+        'classes' : 2
     }
 
 def make_params(args):
@@ -371,8 +377,8 @@ def get_data(args, params):
     if '--data_dir' in args and args['--data_dir'] is not None:
         data_dir = args['--data_dir']
 
-    train_data, x_dim = load_data("processed-data/graphs.json", data_dir, params['task_id'], restrict=params["restrict_data"], tie_fwd_bkwd=params['tie_fwd_bkwd'])
-    valid_data, x_dim = load_data("processed-data/graphs.json", data_dir, params['task_id'], restrict=params["restrict_data"], tie_fwd_bkwd=params['tie_fwd_bkwd'])
+    train_data, x_dim = load_data("processed-data/graphs-train.json", data_dir, params['task_id'], restrict=params["restrict_data"], tie_fwd_bkwd=params['tie_fwd_bkwd'])
+    valid_data, x_dim = load_data("processed-data/graphs-valid.json", data_dir, params['task_id'], restrict=params["restrict_data"], tie_fwd_bkwd=params['tie_fwd_bkwd'])
 
     n_edge_types = max(len(d.adjacency_lists) for d in train_data)
     params.update({
@@ -503,10 +509,11 @@ def training_loop(sess, model: ChemGNN, data: List[PreprocessedGraph], params, i
     accuracy = accuracy / len(data)
     loss = loss / len(data)
 
-    error_ratio = accuracy 
+    error_ratio = accuracy \
+      
 
     instance_per_sec = instances / (time.time() - start_time)
-    print("loss: %s | error_ratio: %s | instances/sec: %s" % (loss, error_ratio, instance_per_sec))
+    print("loss: %s | accuracy: %s | instances/sec: %s" % (loss, error_ratio, instance_per_sec))
     return instance_per_sec, loss, accuracy
 
 

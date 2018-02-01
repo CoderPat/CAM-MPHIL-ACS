@@ -10,6 +10,15 @@ def xavier(shape, name=None):
     initial = tf.random_uniform(shape, minval=-init_range, maxval=init_range, dtype=tf.float32)
     return tf.Variable(initial, name=name)
 
+def normalize_features(features):
+    """Row-normalize feature matrix and convert to tuple representation"""
+    rowsum = np.array(features.sum(1))
+    r_inv = np.power(rowsum, -1).flatten()
+    r_inv[np.isinf(r_inv)] = 0.
+    r_mat_inv = sp.diags(r_inv)
+    features = r_mat_inv.dot(features)
+    return features.todense()
+
 def normalize_adj(adj):
     """Symmetrically normalize adjacency matrix."""
     adj = sp.coo_matrix(adj + sp.eye(adj.shape[0]))
@@ -40,12 +49,10 @@ def sparse_to_tuple(sparse_mx):
 
 
 class GCN:
-    def __init__(self, epochs=200, hidden_size=20, activation='relu', optimizer='adam'):
+    def __init__(self, epochs=200, hidden_size=16, optimizer='adam'):
         self.epochs = epochs
         self.hidden_size = hidden_size
         
-        if activation == 'relu':
-            self.activation = tf.nn.relu
         if optimizer == 'adam':
             self.optimizer = tf.train.AdamOptimizer()
 
@@ -53,24 +60,27 @@ class GCN:
     def build_model(self, input_shape, output_dim):
         self.input = tf.placeholder(tf.float32, shape=input_shape)
         self.mask = tf.placeholder(tf.int32, shape=(input_shape[0],))
-        self.normalized_adj = tf.sparse_placeholder(tf.float32, shape=(input_shape[0], input_shape[0]))
+        self.normalized_adj = tf.sparse_placeholder(tf.float32)
         self.labels = tf.placeholder(tf.int32, shape=(input_shape[0], output_dim))
 
-        hidden_layer = self.build_gcn_layer(self.input, self.normalized_adj, self.hidden_size)
+        hidden_layer = self.build_gcn_layer(self.input, self.normalized_adj, self.hidden_size, activation=tf.nn.relu)
         output_layer = self.build_gcn_layer(hidden_layer, self.normalized_adj, output_dim)
 
         self.score_layer = output_layer
 
 
     def build_gcn_layer(self, input_tensor, normalized_adj, output_dim, 
-                        dropout=0.2, name="gcn_layer"):
-        input_dim = input_tensor.shape[-1].value
+                        dropout=0, name="gcn_layer", activation=lambda x: x):
+        if dropout != 0:
+            input_tensor = tf.nn.dropout(input_tensor, 1-self.dropout)
+
+        input_dim = input_tensor.get_shape()[-1].value
         weights = xavier([input_dim, output_dim],name='weights')
         bias = tf.zeros([output_dim], name='bias')
 
-        output = tf.sparse_tensor_dense_matmul(normalized_adj, input_tensor)
-        output = tf.matmul(output, weights) + bias
-        return self.activation(output) 
+        output = tf.matmul(input_tensor, weights)
+        output = tf.sparse_tensor_dense_matmul(normalized_adj, output) 
+        return activation(output) 
 
     
     def loss(self, logits):
@@ -92,7 +102,7 @@ class GCN:
         input_shape = X.shape
         output_dim = Y.shape[1]
         normalized_adj = normalize_adj(adj_matrix)
-
+        normalized_input = normalize_features(X)
         self.build_model(input_shape, output_dim)
         loss_t = self.loss(self.score_layer)
         accuracy_t = self.accuracy(self.score_layer)
@@ -103,14 +113,12 @@ class GCN:
         
 
         for epoch in range(self.epochs):
-            print(Y.shape)
-            print(self.labels.shape)
-            feed_dict = {self.input: X, 
+            feed_dict = {self.input: normalized_input, 
                          self.mask: mask,
                          self.normalized_adj: normalized_adj,
                          self.labels : Y}
             _, loss, accuracy = self.session.run([train_op, loss_t, accuracy_t], feed_dict=feed_dict)
-            print("Epoch: %04d, train_loss={:.5f}, train_acc= {:.5f}" %
+            print("Epoch: %04d, train_loss=%5f, train_acc=%5f" %
                   (epoch, loss, accuracy))
 
     def predict(self, X):

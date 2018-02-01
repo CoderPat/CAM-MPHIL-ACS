@@ -35,7 +35,7 @@ def extract_train_valid(allx, ally, samples_class, valid_size):
 
     return idx_train, idx_valid
     
-def load_data(dataset_str, samples_class=200):
+def load_data(dataset_str, samples_class=20):
     """Load data."""
     names = ['x', 'y', 'tx', 'ty', 'allx', 'ally', 'graph']
     objects = []

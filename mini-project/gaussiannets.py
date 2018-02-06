@@ -16,6 +16,7 @@ import gpflow
 from sklearn.metrics import accuracy_score
 
 import numpy as np
+import pickle
 
 class ProbabilisticCNN:
     """
@@ -42,16 +43,17 @@ class ProbabilisticCNN:
         self.__gclassifier_graph = tf.Graph()
         self.__gaussian_classifier = None
 
-    def fit(self, x_train, y_train, x_validation = None, y_validation = None):
+    def fit(self, x_train, y_train_m, x_validation = None, y_validation = None):
         """
         """
-        y_train_m = keras.utils.to_categorical(y_train, self.__num_classes)
+
+        y_train = np.argmax(y_train_m, axis=1)
 
         if y_validation is not None:
             y_validation_m = keras.utils.to_categorical(y_validation, self.__num_classes)
 
         self.__network.compile(loss=keras.losses.categorical_crossentropy,
-                               optimizer=keras.optimizers.Adadelta(),
+                               optimizer=keras.optimizers.Adam(),
                                metrics=['accuracy'])
 
         if x_validation is not None:
@@ -68,7 +70,6 @@ class ProbabilisticCNN:
 
 
         features_train = self.__features_extractor.predict(x_train).astype(np.float64)
-
         with self.__gclassifier_graph.as_default():
             kernel = gpflow.kernels.Matern32(input_dim=128) + gpflow.kernels.White(input_dim=128, variance=0.01)
             self.__gaussian_classifier = gpflow.models.SVGP(features_train, y_train, kernel,
@@ -90,4 +91,26 @@ class ProbabilisticCNN:
             with self.__gclassifier_graph.as_default():
                 return self.__gaussian_classifier.predict_y(features_x)
 
+    def save(self, path):
+        network_weights = self.__network.get_weights()
+        gp_weights = self.__gaussian_classifier.read_trainables()
+        with open(path, 'wb') as f:
+            pickle.dump((network_weights, gp_weights), f)
 
+    def load(self, path, x_train, y_train_m):
+        with open(path, 'rb') as f:
+            network_weights, gp_weights = pickle.load(f)
+
+        self.__network.set_weights(network_weights)
+        features_train = self.__features_extractor.predict(x_train).astype(np.float64)
+        y_train = np.argmax(y_train_m, axis=1)
+
+        with self.__gclassifier_graph.as_default():
+            kernel = gpflow.kernels.Matern32(input_dim=128) + gpflow.kernels.White(input_dim=128, variance=0.01)
+            self.__gaussian_classifier = gpflow.models.SVGP(features_train, y_train, kernel,
+                                                            likelihood=gpflow.likelihoods.MultiClass(10),
+                                                            Z=features_train[::600].copy(), num_latent=10, whiten=True, q_diag=True)
+
+            self.__gaussian_classifier.kern.white.variance.trainable = False
+            self.__gaussian_classifier.feature.trainable = False
+            self.__gaussian_classifier.assign(gp_weights)

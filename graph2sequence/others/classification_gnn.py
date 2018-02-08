@@ -1,7 +1,7 @@
 #!/usr/bin/env/python
 """
 Usage:
-    chem_tensorflow_sparse.py [options]
+    classification_gnn.py [options]
 
 Options:
     -h --help                Show this screen.

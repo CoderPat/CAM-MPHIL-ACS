@@ -24,7 +24,7 @@ import json
 import sys, traceback
 import pdb
 
-from graph2sequence.classification_gnn import ClassificationGNN
+from graph2sequence.base.classification_gnn import ClassificationGNN
 
 def load_data(data_dir, file_name, restrict = None):
     full_path = os.path.join(data_dir, file_name)
@@ -46,18 +46,13 @@ def load_data(data_dir, file_name, restrict = None):
 
 def main():
     args = docopt(__doc__)
-    data_dir = args.get('--data-dir')
-    train_data = args.get('--training-data')
-    valid_data = args.get('--validation-data')
-    if data_dir is None:
-        data_dir = "./"
-    if train_data is None:
-        train_data = "processed-data/graphs-train.json"
-    if valid_data is None:
-        valid_data = "processed-data/graphs-valid.json"
+    data_dir = args.get('--data-dir') or './'
+    train_data = args.get('--training-data') or "processed-data/graphs-train.json"
+    valid_data = args.get('--validation-data') or "processed-data/graphs-valid.json"
 
     train_data = load_data(data_dir, train_data)
     valid_data = load_data(data_dir, valid_data)
+    
     try:
         model = ClassificationGNN(args)
         model.train(train_data, valid_data)

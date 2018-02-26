@@ -21,7 +21,7 @@ import pickle
 class ProbabilisticCNN:
     """
     """
-    def __init__(self, input_shape, num_classes, batch_size = 128, epochs = 9):
+    def __init__(self, input_shape, num_classes, batch_size = 128, epochs = 9, baseline=False):
         self.__num_classes = num_classes
         self.__batch_size = batch_size
         self.__epochs = epochs
@@ -42,6 +42,12 @@ class ProbabilisticCNN:
                                           outputs=self.__network.layers[-2].output)
         self.__gclassifier_graph = tf.Graph()
         self.__gaussian_classifier = None
+
+        if baseline:
+            self.__raw_gpc = True
+            self.__raw_gpc_graph = tf.Graph()
+        else:
+            self.__raw_gpc = None
 
     def fit(self, x_train, y_train_m, x_validation = None, y_validation = None):
         """
@@ -80,12 +86,29 @@ class ProbabilisticCNN:
             self.__gaussian_classifier.feature.trainable = False
             opt = gpflow.train.ScipyOptimizer()
             opt.minimize(self.__gaussian_classifier)
+        
+        if self.__raw_gpc:
+            with self.__raw_gpc_graph.as_default():
+                flatten_x = x_train.reshape(x_train.shape[0], -1)
+                kernel = gpflow.kernels.Matern32(input_dim=128) + gpflow.kernels.White(input_dim=128, variance=0.01)
+                self.__raw_gpc = gpflow.models.SVGP(flatten_x, y_train, kernel,
+                                                    likelihood=gpflow.likelihoods.MultiClass(10),
+                                                    Z=features_train[::600].copy(), num_latent=10, whiten=True, q_diag=True)
+
+                self.__raw_gpc.kern.white.variance.trainable = False
+                self.__raw_gcp.feature.trainable = False
+                opt = gpflow.train.ScipyOptimizer()
+                opt.minimize(self.__raw_gcp)
 
     def predict(self, x, raw_predict=False):
         """
         """
         if raw_predict:
-            return self.__network.predict(x)
+            if self.__raw_gcp is not None:
+                flatten_x = x_train.reshape(x_train.shape[0], -1)
+                return self.__network.predict(x), self.__raw_gcp.predict_y(flatten_x)
+            else:
+                return self.__network.predict(x)
         else:
             features_x = self.__features_extractor.predict(x).astype(np.float64)
             with self.__gclassifier_graph.as_default():
@@ -94,12 +117,17 @@ class ProbabilisticCNN:
     def save(self, path):
         network_weights = self.__network.get_weights()
         gp_weights = self.__gaussian_classifier.read_trainables()
+        if self.__raw_gcp is not None:
+            raw_gp_weigths = self.__raw_gcp.read_trainables()
+        else:
+            raw_gp_weigths = None
+
         with open(path, 'wb') as f:
-            pickle.dump((network_weights, gp_weights), f)
+            pickle.dump((network_weights, gp_weights, raw_gp_weigths), f)
 
     def load(self, path, x_train, y_train_m):
         with open(path, 'rb') as f:
-            network_weights, gp_weights = pickle.load(f)
+            network_weights, gp_weights, raw_gp_weigths = pickle.load(f)
 
         self.__network.set_weights(network_weights)
         features_train = self.__features_extractor.predict(x_train).astype(np.float64)
@@ -114,3 +142,15 @@ class ProbabilisticCNN:
             self.__gaussian_classifier.kern.white.variance.trainable = False
             self.__gaussian_classifier.feature.trainable = False
             self.__gaussian_classifier.assign(gp_weights)
+
+        if raw_gp_weigths is not None:
+            flatten_x = x_train.reshape(x_train.shape[0], -1)
+            kernel = gpflow.kernels.Matern32(input_dim=128) + gpflow.kernels.White(input_dim=128, variance=0.01)
+            self.__raw_gpc = gpflow.models.SVGP(features_train, y_train, kernel,
+                                                            likelihood=gpflow.likelihoods.MultiClass(10),
+                                                            Z=features_train[::600].copy(), num_latent=10, whiten=True, q_diag=True)
+
+            self.__raw_gpc.kern.white.variance.trainable = False
+            self.__raw_gpc.feature.trainable = False
+            self.__raw_gpc.assign(gp_weights)
+

@@ -4,4 +4,4 @@ __pycache__/
 *$py.class
 
 # Processed graph data
-examples/code2nlp/processed-data/
+examples/code2nlp/processed-data/*.json

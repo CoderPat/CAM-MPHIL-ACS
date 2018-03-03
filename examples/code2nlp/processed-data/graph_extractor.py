@@ -40,7 +40,6 @@ if __name__ == "__main__":
     data = []
     graph_node_labels = []
     num_inits = 0
-    bodies, decls = bodies[:200000], decls[:200000]
     for idx, (body, decl) in enumerate(zip(bodies, decls)):
         try:
             visitor = AstGraphGenerator() 
@@ -61,9 +60,9 @@ if __name__ == "__main__":
     node_counts = []
     prev_ind = 0
     for i, labels in enumerate(graph_node_labels):
-        counts = all_node_counts[prev_ind:prev_ind+len(labels), :].tocoo()
-        indices = [(row.item(), column.item()) for row, column in zip(counts.row, counts.col)]
-        data[i]["features"] = (indices, counts.data.tolist(), counts.shape)
+        counts = all_node_counts[prev_ind:prev_ind+len(labels), :]
+        data[i]["features"] = (counts.data.tolist(), counts.indices.tolist(), 
+                               counts.indptr.tolist(), counts.shape)
         prev_ind += len(labels)
 
 

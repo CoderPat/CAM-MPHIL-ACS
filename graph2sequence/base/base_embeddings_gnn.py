@@ -50,7 +50,7 @@ class BaseEmbeddingsGNN(BaseGNN):
     def prepare_specific_graph_model(self) -> None:
         h_dim = self.params['hidden_size']
 
-        self.placeholders['initial_node_representation'] = tf.sparse_placeholder(tf.int32, [None, self.annotation_size],
+        self.placeholders['initial_node_representation'] = tf.sparse_placeholder(tf.int32, [None],
                                                                                  name='node_features')
         self.placeholders['adjacency_lists'] = [tf.placeholder(tf.int64, [None, 2], name='adjacency_e%s' % e)
                                                 for e in range(self.num_edge_types)]
@@ -66,8 +66,6 @@ class BaseEmbeddingsGNN(BaseGNN):
             activation_fun = tf.nn.relu
         else:
             raise Exception("Unknown activation function type '%s'." % activation_name)
-
-
 
         self.weights['word_embeddings'] = tf.Variable(glorot_init([self.annotation_size, h_dim]),
                                                       name='word_embeddings')
@@ -97,10 +95,11 @@ class BaseEmbeddingsGNN(BaseGNN):
                 self.weights['rnn_cells'].append(cell)
 
     def compute_final_node_representations(self) -> tf.Tensor:
-        cur_node_states = self.placeholders['initial_node_representation']  # number of nodes in batch v x D
+        cur_node_states = self.placeholders['initial_node_representation']  # number of nodes in batch v x V
         num_nodes = tf.shape(self.placeholders['initial_node_representation'], out_type=tf.int64)[0]
 
         cur_node_states = tf.nn.embedding_lookup_sparse(self.weights['word_embeddings'], cur_node_states, None, combiner='mean')
+        print(cur_node_states.shape)
 
         for (layer_idx, num_timesteps) in enumerate(self.params['layer_timesteps']):
             with tf.variable_scope('gnn_layer_%i' % layer_idx):
@@ -240,9 +239,9 @@ class BaseEmbeddingsGNN(BaseGNN):
                 node_offset += num_nodes_in_graph
 
             batch_node_features = batch_node_features.tocoo()
-            indices = np.array([(row, column) for row, column in zip(batch_node_features.row, batch_node_features.col)])
+            indices = np.array([[row] for row in batch_node_features.row])
             batch_feed_dict = {
-                self.placeholders['initial_node_representation']: (indices, batch_node_features.data, batch_node_features.shape),
+                self.placeholders['initial_node_representation']: (indices, batch_node_features.col, (batch_node_features.shape[0], )),
                 self.placeholders['num_incoming_edges_per_type']: np.concatenate(batch_num_incoming_edges_per_type, axis=0),
                 self.placeholders['graph_nodes_list']: np.array(batch_graph_nodes_list, dtype=np.int32),
                 self.placeholders['target_values']: np.array(batch_target_task_values),

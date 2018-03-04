@@ -61,8 +61,8 @@ if __name__ == "__main__":
     prev_ind = 0
     for i, labels in enumerate(graph_node_labels):
         counts = all_node_counts[prev_ind:prev_ind+len(labels), :]
-        data[i]["features"] = (counts.data.tolist(), counts.indices.tolist(), 
-                               counts.indptr.tolist(), counts.shape)
+        data[i]["node_features"] = (counts.data.tolist(), counts.indices.tolist(), 
+                                    counts.indptr.tolist(), counts.shape)
         prev_ind += len(labels)
 
 
@@ -81,7 +81,6 @@ if __name__ == "__main__":
         json.dump(new_data, f)
     
 """
-    
     if print_random_example:
         print(bodies[412])
         visitor = AstGraphGenerator() 

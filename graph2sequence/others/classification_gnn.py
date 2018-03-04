@@ -21,11 +21,11 @@ import tensorflow as tf
 import sys, traceback
 import pdb
 
-from .base.base_sparse_gnn import BaseSparseGNN
-from .base.utils import glorot_init, MLP
+from ..base.base_embeddings_gnn import BaseEmbeddingsGNN
+from ..base.utils import glorot_init, MLP
 
 
-class ClassificationGNN(BaseSparseGNN):
+class ClassificationGNN(BaseEmbeddingsGNN):
     """
     """
     def __init__(self, args):
@@ -41,11 +41,10 @@ class ClassificationGNN(BaseSparseGNN):
 
     def gated_regression(self, last_h, regression_gate, regression_transform):
         # last_h: [v x h]
-        gate_input = tf.concat([last_h, self.placeholders['initial_node_representation']], axis=-1)  # [v x 2h]
-        gated_outputs = tf.nn.sigmoid(regression_gate(gate_input)) * regression_transform(last_h)  # [v x c]
+        gated_outputs = tf.nn.sigmoid(regression_gate(last_h)) * regression_transform(last_h)  # [v x c]
 
         # Sum up all nodes per-graph
-        num_nodes = tf.shape(gate_input, out_type=tf.int64)[0]
+        num_nodes = tf.shape(last_h, out_type=tf.int64)[0]
         graph_nodes = tf.SparseTensor(indices=self.placeholders['graph_nodes_list'],
                                       values=tf.ones_like(self.placeholders['graph_nodes_list'][:, 0], dtype=tf.float32),
                                       dense_shape=[self.placeholders['num_graphs'] , num_nodes])  # [g x v]
@@ -55,11 +54,11 @@ class ClassificationGNN(BaseSparseGNN):
 
     def get_output(self, last_h):
         with tf.variable_scope("regression_gate"):
-            self.weights['regression_gate'] = MLP(2 * self.params['hidden_size'], self.output_shape[0], [],
-                                                                           self.placeholders['out_layer_dropout_keep_prob'])
+            self.weights['regression_gate'] = MLP(self.params['hidden_size'], self.output_shape[0], [],
+                                                  self.placeholders['out_layer_dropout_keep_prob'])
         with tf.variable_scope("regression"):
             self.weights['regression_transform'] = MLP(self.params['hidden_size'], self.output_shape[0], [],
-                                                                        self.placeholders['out_layer_dropout_keep_prob'])
+                                                       self.placeholders['out_layer_dropout_keep_prob'])
 
         return self.gated_regression(self.ops['final_node_representations'],
                                      self.weights['regression_gate'],

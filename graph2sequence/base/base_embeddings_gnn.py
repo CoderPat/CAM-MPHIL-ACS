@@ -21,6 +21,7 @@ import tensorflow as tf
 import sys, traceback
 import pdb
 
+from scipy.sparse import vstack
 from .base_gnn import BaseGNN
 from .utils import glorot_init, SMALL_NUMBER
 
@@ -33,8 +34,6 @@ class BaseEmbeddingsGNN(BaseGNN):
     def default_params(cls):
         params = dict(super().default_params())
         params.update({
-            'embeddings_size': 200
-
             'batch_size': 100000,
             'use_edge_bias': False,
             'use_edge_msg_avg_aggregation': True,
@@ -50,10 +49,9 @@ class BaseEmbeddingsGNN(BaseGNN):
 
     def prepare_specific_graph_model(self) -> None:
         h_dim = self.params['hidden_size']
-        embeddings_size = self.params['embeddings_size']
 
-        self.placeholders['initial_node_representation'] = tf.placeholder(tf.float32, [None, h_dim],
-                                                                          name='node_features')
+        self.placeholders['initial_node_representation'] = tf.sparse_placeholder(tf.int32, [None, self.annotation_size],
+                                                                                 name='node_features')
         self.placeholders['adjacency_lists'] = [tf.placeholder(tf.int64, [None, 2], name='adjacency_e%s' % e)
                                                 for e in range(self.num_edge_types)]
         self.placeholders['num_incoming_edges_per_type'] = tf.placeholder(tf.float32, [None, self.num_edge_types],
@@ -71,7 +69,7 @@ class BaseEmbeddingsGNN(BaseGNN):
 
 
 
-        self.weights['word_embeddings'] = tf.variable(glorot_init([self.vocabulary_size, embedding_size]),
+        self.weights['word_embeddings'] = tf.Variable(glorot_init([self.annotation_size, h_dim]),
                                                       name='word_embeddings')
 
         # Generate per-layer values for edge weights, biases and gated units. If we tie them, they are just copies:
@@ -99,9 +97,10 @@ class BaseEmbeddingsGNN(BaseGNN):
                 self.weights['rnn_cells'].append(cell)
 
     def compute_final_node_representations(self) -> tf.Tensor:
-
         cur_node_states = self.placeholders['initial_node_representation']  # number of nodes in batch v x D
         num_nodes = tf.shape(self.placeholders['initial_node_representation'], out_type=tf.int64)[0]
+
+        cur_node_states = tf.nn.embedding_lookup_sparse(self.weights['word_embeddings'], cur_node_states, None, combiner='mean')
 
         for (layer_idx, num_timesteps) in enumerate(self.params['layer_timesteps']):
             with tf.variable_scope('gnn_layer_%i' % layer_idx):
@@ -146,6 +145,24 @@ class BaseEmbeddingsGNN(BaseGNN):
 
 
     # ----- Data preprocessing and chunking into minibatches:
+
+    def process_data(self, data, is_training_data: bool):
+        restrict = self.args.get("--restrict_data")
+        if restrict is not None and restrict > 0:
+            data = data[:restrict]
+
+        # Get some common data out:
+        if self.params['input_shape'] is None or self.params['output_shape'] is None:
+            num_fwd_edge_types = 0
+            for g in data:
+                self.max_num_vertices = max(self.max_num_vertices, max([v for e in g['graph'] for v in [e[0], e[2]]]))
+                num_fwd_edge_types = max(num_fwd_edge_types, max([e[1] for e in g['graph']]))
+            self.num_edge_types = max(self.num_edge_types, num_fwd_edge_types * (1 if self.params['tie_fwd_bkwd'] else 2))
+            self.annotation_size = max(self.annotation_size, data[0]["node_features"].shape[1])
+            self.output_shape = np.array(data[0]['output']).shape
+
+        return self.process_raw_graphs(data, is_training_data)
+
     def process_raw_graphs(self, raw_data: Sequence[Any], is_training_data: bool) -> Any:
         processed_graphs = []
         for d in raw_data:
@@ -191,7 +208,7 @@ class BaseEmbeddingsGNN(BaseGNN):
         num_graphs = 0
         while num_graphs < len(data):
             num_graphs_in_batch = 0
-            batch_node_features = []
+            batch_node_features = None
             batch_target_task_values = []
             batch_target_task_mask = []
             batch_adjacency_lists = [[] for _ in range(self.num_edge_types)]
@@ -199,13 +216,10 @@ class BaseEmbeddingsGNN(BaseGNN):
             batch_graph_nodes_list = []
             node_offset = 0
             
-            while num_graphs < len(data) and node_offset + len(data[num_graphs]['init']) < self.params['batch_size']:
+            while num_graphs < len(data) and node_offset + data[num_graphs]['init'].shape[0] < self.params['batch_size']:
                 cur_graph = data[num_graphs]
-                num_nodes_in_graph = len(cur_graph['init'])
-                padded_features = np.pad(cur_graph['init'],
-                                         ((0, 0), (0, self.params['hidden_size'] - self.annotation_size)),
-                                         'constant')
-                batch_node_features.extend(padded_features)
+                num_nodes_in_graph = cur_graph['init'].shape[0]
+                batch_node_features = vstack([batch_node_features, cur_graph['init']]) if num_graphs >= 1 else cur_graph['init']
                 batch_graph_nodes_list.extend(
                     (num_graphs_in_batch, node_offset + i) for i in range(num_nodes_in_graph))
                 for i in range(self.num_edge_types):
@@ -225,8 +239,10 @@ class BaseEmbeddingsGNN(BaseGNN):
                 num_graphs_in_batch += 1
                 node_offset += num_nodes_in_graph
 
+            batch_node_features = batch_node_features.tocoo()
+            indices = np.array([(row, column) for row, column in zip(batch_node_features.row, batch_node_features.col)])
             batch_feed_dict = {
-                self.placeholders['initial_node_representation']: np.array(batch_node_features),
+                self.placeholders['initial_node_representation']: (indices, batch_node_features.data, batch_node_features.shape),
                 self.placeholders['num_incoming_edges_per_type']: np.concatenate(batch_num_incoming_edges_per_type, axis=0),
                 self.placeholders['graph_nodes_list']: np.array(batch_graph_nodes_list, dtype=np.int32),
                 self.placeholders['target_values']: np.array(batch_target_task_values),

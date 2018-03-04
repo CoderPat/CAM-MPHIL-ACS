@@ -16,6 +16,7 @@ from typing import List, Tuple, Dict, Sequence, Any
 
 from docopt import docopt
 from collections import defaultdict
+from scipy.sparse import csr_matrix
 
 import numpy as np
 
@@ -24,7 +25,7 @@ import json
 import sys, traceback
 import pdb
 
-from graph2sequence.base.classification_gnn import ClassificationGNN
+from graph2sequence.others.classification_gnn import ClassificationGNN
 
 def load_data(data_dir, file_name, restrict = None):
     full_path = os.path.join(data_dir, file_name)
@@ -37,7 +38,8 @@ def load_data(data_dir, file_name, restrict = None):
     for d in data:
         g = {}
         g["graph"] = d["graph"]
-        g["node_features"] = np.eye(51)[np.array(d["node_features"])]
+        (data, indices, indptr, shape) = d["node_features"]
+        g["node_features"] = csr_matrix((data, indices, indptr), shape)
         g["output"] = np.eye(2)[int(d["label"])]
         new_data.append(g)
 

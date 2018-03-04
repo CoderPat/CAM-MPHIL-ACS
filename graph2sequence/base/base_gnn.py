@@ -22,7 +22,7 @@ class BaseGNN(object):
             'clamp_gradient_norm': 1.0,
             'out_layer_dropout_keep_prob': 1.0,
 
-            'hidden_size': 100,
+            'hidden_size': 200,
             'num_timesteps': 4,
             'use_graph': True,
 

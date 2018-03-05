@@ -23,20 +23,7 @@ def camel_case_split(identifier):
         subtoken_dict[subtoken] += 1
     return dict(subtoken_dict)
 
-print(camel_case_split("camelCase"))
-
-if __name__ == "__main__":
-    
-    with open("../data/V2/repo_split/repo_split.parallel_methods_bodies.valid") as f:
-        bodies = f.readlines()
-
-    with open("../data/V2/repo_split/repo_split.parallel_methods_decl.valid") as f:
-        decls = f.readlines()
-
-    bodies = [body.replace("DCNL ", "\n").replace("DCSP ", "\t") for body in bodies]
-    bodies = ["\n".join([line[1:] for line in body.split("\n")]) for body in bodies]
-    errors = 0
-
+def process_data(bodies, decls):
     data = []
     graph_node_labels = []
     num_inits = 0
@@ -51,6 +38,19 @@ if __name__ == "__main__":
             data.append({"graph":edge_list, "label":label})
         except:
             errors += 1
+        print("Generated %d graphs out of %d snippets" % (len(bodies) - errors, len(bodies)))
+    return data
+
+if __name__ == "__main__":
+    
+    with open("../data/V2/repo_split/repo_split.parallel_methods_bodies.train") as f:
+        valid_bodies = f.readlines()
+    with open("../data/V2/repo_split/repo_split.parallel_methods_decl.train") as f:
+        valid_decls = f.readlines()
+
+    bodies = [body.replace("DCNL ", "\n").replace("DCSP ", "\t") for body in bodies]
+    bodies = ["\n".join([line[1:] for line in body.split("\n")]) for body in bodies]
+    errors = 0
 
     print("Generated %d graphs out of %d snippets" % (len(bodies) - errors, len(bodies)))
     all_node_labels = [camel_case_split(label) for label in itertools.chain.from_iterable(graph_node_labels)]

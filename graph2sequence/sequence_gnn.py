@@ -41,6 +41,8 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
         return params
 
     def get_output(self, last_h):
+        h_dim = self.params['hidden_size']
+
         activation_name = self.params['graph_rnn_activation'].lower()
         if activation_name == 'tanh':
             activation_fun = tf.nn.tanh
@@ -53,21 +55,24 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
         elif cell_type == 'rnn':
             decoder_cell = tf.nn.rnn_cell.BasicRNNCell(h_dim, activation=activation_fun)
 
-        # Helper
+
+        graph_embeddings = (tf.cast(ph1, tf.float32) @ ph2) / 
+                            tf.reshape(tf.cast(tf.reduce_sum(ph1, 1), tf.float32), (-1, 1))
+                                
+        projection_layer = tf.layers.Dense(tgt_vocab_size, use_bias=False)
         helper = tf.contrib.seq2seq.TrainingHelper(decoder_emb_inp, 
                                                    decoder_lengths, time_major=False)
-        # Decoder
         decoder = tf.contrib.seq2seq.BasicDecoder(decoder_cell, 
-                                                  helper, encoder_state, output_layer=projection_layer)
-        # Dynamic decoding
+                                                  helper, graph_embeddings)
+
         outputs, _ = tf.contrib.seq2seq.dynamic_decode(decoder, ...)
         logits = outputs.rnn_output
 
     def get_loss(self, computed_logits, target_classes):
 
-    def get_accuracy(self, computed_logits, target_classes):
 
-        
+    def get_accuracy(self, computed_logits, target_classes):
+ 
 
 
 def main():

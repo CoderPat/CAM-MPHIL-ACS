@@ -132,6 +132,10 @@ if __name__ == "__main__":
     if input_vectorizer is not None:
         with open(input_vectorizer, 'rb') as f:
             input_vectorizer = pickle.load(f)
+
+    if output_vectorizer is not None:
+        with open(output_vectorizer, 'rb') as f:
+            output_vectorizer = pickle.load(f)
     
     data, input_vectorizer, output_vectorizer = process_data(functions, docs, input_vectorizer, output_vectorizer)
 

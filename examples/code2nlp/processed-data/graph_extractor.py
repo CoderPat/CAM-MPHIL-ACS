@@ -21,6 +21,7 @@ import gc
 import json
 import itertools
 import pickle
+import progressbar
 
 
 import networkx as nx
@@ -63,6 +64,8 @@ def process_data(functs, docs, input_vectorizer, output_vectorizer):
     num_inits, errors = (0,0)
     tokenizer = output_vectorizer.build_tokenizer() if output_vectorizer is not None else \
                 CountVectorizer().build_tokenizer()
+
+    bar = progressbar.ProgressBar(redirect_stdout=True, max_value=len(functs))
     for idx, (funct, doc) in enumerate(zip(functs, docs)):
         try:
             visitor = AstGraphGenerator() 
@@ -74,6 +77,9 @@ def process_data(functs, docs, input_vectorizer, output_vectorizer):
 
             graph_node_labels.append([label for _, label in sorted(visitor.node_label.items())])
             data.append({"graph":edge_list})
+
+            if idx % 100:
+                bar.update(idx)
         except:
             errors += 1
 
@@ -123,7 +129,7 @@ if __name__ == "__main__":
 
     with open(code_data + "." + split) as f:
         functions = f.readlines()
-    with open(label_data + "." + split) as f:
+    with open(label_data + "." + split, errors='ignore') as f:
         docs = f.readlines()
 
     functions = [function.replace("DCNL ", "\n").replace("DCSP ", "\t") for function in functions]

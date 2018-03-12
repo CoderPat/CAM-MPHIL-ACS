@@ -14,7 +14,7 @@ Options:
     --save-output-vect FILE  File to save the created vectorizer for encoding code descriptions.
 """
 from ast import *
-from re import finditer
+from re import finditer, split as re_split
 from collections import defaultdict
 from docopt import docopt
 import gc
@@ -23,22 +23,53 @@ import itertools
 import pickle
 import progressbar
 
+from scipy.sparse import csr_matrix
 
 import networkx as nx
 from networkx.drawing.nx_agraph import write_dot
 
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.feature_extraction import DictVectorizer
-from sklearn.feature_extraction.text import CountVectorizer
 
 from ast_graph_generator import AstGraphGenerator
+from sklearn.feature_extraction.text import CountVectorizer
 
-def camel_case_split(identifier):
-    matches = finditer('.+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)', identifier)
+class Vectorizer:
+    def __init__(self, minimum_frequency=2):
+        self.__minimum_frequency = minimum_frequency
+        self.__dictionary = None
+        self.__reverse_dictionary = None
+    
+    def build_and_vectorize(self, term_dics):
+        self.__dictionary = {}
+        counts = defaultdict(lambda: 0)
+        for term_dict in term_dics:
+            for term in term_dict.keys():
+                counts[term] += 1
+                if counts[term] == self.__minimum_frequency:
+                    self.__dictionary[term] = len(self.__dictionary)+1
+
+        self.__reversed_dictionary = dict(zip(self.__dictionary.values(), self.__dictionary.keys()))
+        return self.vectorize(term_dics)
+        
+    def vectorize(self, term_dics):
+        indices, indptr, values = ([], [0], [])
+        for term_dict in term_dics:
+            for term, frequency in term_dict.items():
+                indices.append(self.__dictionary[term] if term in self.__dictionary else 0)
+                values.append(frequency)
+            indptr.append(indptr[-1]+len(term_dict))
+        
+        return csr_matrix((values, indices, indptr), (len(term_dics), len(self.__dictionary)+1))
+
+
+def splitter(identifier):
+    identifiers = re_split('_|-', identifier)
     subtoken_dict = defaultdict(lambda: 0)
-    for subtoken in [m.group(0).lower() for m in matches]:
-        subtoken_dict[subtoken] += 1
+    for identifier in identifiers:
+        matches = finditer('.+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)', identifier)
+        for subtoken in [m.group(0).lower() for m in matches]:
+            subtoken_dict[subtoken] += 1
     return dict(subtoken_dict)
 
 def plot_code_graph(snippet):
@@ -62,10 +93,8 @@ def plot_code_graph(snippet):
 def process_data(functs, docs, input_vectorizer, output_vectorizer):
     data, graph_node_labels, docs_words = ([], [], [])
     num_inits, errors = (0,0)
-    tokenizer = output_vectorizer.build_tokenizer() if output_vectorizer is not None else \
-                CountVectorizer().build_tokenizer()
+    tokenizer = CountVectorizer().build_tokenizer()
 
-    bar = progressbar.ProgressBar(redirect_stdout=True, max_value=len(functs))
     for idx, (funct, doc) in enumerate(zip(functs, docs)):
         try:
             visitor = AstGraphGenerator() 
@@ -74,31 +103,28 @@ def process_data(functs, docs, input_vectorizer, output_vectorizer):
             edge_list = [(origin, t, destination) for (origin, destination), edges in visitor.graph.items() for t in edges]
 
             docs_words.append(tokenizer(doc))
-
             graph_node_labels.append([label for _, label in sorted(visitor.node_label.items())])
             data.append({"graph":edge_list})
 
-            if idx % 100:
-                bar.update(idx)
         except:
             errors += 1
 
     print("Generated %d graphs out of %d snippets" % (len(functions) - errors, len(functions)))
 
-    all_node_labels = [camel_case_split(label) for label in itertools.chain.from_iterable(graph_node_labels)]
-    all_words = list(itertools.chain.from_iterable(docs_words))
+    all_node_labels = [splitter(label) for label in itertools.chain.from_iterable(graph_node_labels)]
+    all_words = [{word: 1} for word in itertools.chain.from_iterable(docs_words)]
 
     if input_vectorizer is None:
-        input_vectorizer = DictVectorizer()
-        all_node_counts = input_vectorizer.fit_transform(all_node_labels)
+        input_vectorizer = Vectorizer()
+        all_node_counts = input_vectorizer.build_and_vectorize(all_node_labels)
     else:
-        all_node_counts = input_vectorizer.transform(all_node_labels)
+        all_node_counts = input_vectorizer.vectorize(all_node_labels)
 
     if output_vectorizer is None:
-        output_vectorizer = CountVectorizer()
-        all_word_indices = output_vectorizer.fit_transform(all_words).indices
+        output_vectorizer = Vectorizer()
+        all_word_indices = output_vectorizer.build_and_vectorize(all_words).indices
     else:
-        all_word_indices = output_vectorizer.transform(all_words).indices
+        all_word_indices = output_vectorizer.vectorize(all_words).indices
 
     prev_ind = 0
     for i, labels in enumerate(graph_node_labels):

@@ -123,7 +123,7 @@ if __name__ == "__main__":
 
     with open(code_data + "." + split) as f:
         functions = f.readlines()
-    with open(label_data + "." + split) as f:
+    with open(label_data + "." + split, errors='ignore') as f:
         docs = f.readlines()
 
     functions = [function.replace("DCNL ", "\n").replace("DCSP ", "\t") for function in functions]

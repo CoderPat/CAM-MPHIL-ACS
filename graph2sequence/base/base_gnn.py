@@ -18,7 +18,7 @@ class BaseGNN(object):
         return {
             'num_epochs': 3000,
             'patience': 25,
-            'learning_rate': 0.0001,
+            'learning_rate': 0.001,
             'clamp_gradient_norm': 1.0,
             'out_layer_dropout_keep_prob': 1.0,
 
@@ -149,7 +149,7 @@ class BaseGNN(object):
                 else:
                     print("Freezing weights of variable %s." % var.name)
             trainable_vars = filtered_vars
-        optimizer = tf.train.AdamOptimizer()
+        optimizer = tf.train.AdamOptimizer(learning_rate=self.params['learning_rate'])
         grads_and_vars = optimizer.compute_gradients(self.ops['loss'], var_list=trainable_vars)
         clipped_grads = []
         for grad, var in grads_and_vars:

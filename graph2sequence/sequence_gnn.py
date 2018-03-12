@@ -43,7 +43,7 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
 
     def prepare_specific_graph_model(self) -> None:
         self.placeholders['decoder_inputs'] = tf.placeholder(tf.int32, [None, self.max_output_len+1], name='decoder_inputs')
-        self.placeholders['sequence_lens'] = tf.placeholder(tf.int32, [None, ], name='sequence_lens')
+        self.placeholders['sequence_lens'] = tf.placeholder(tf.int32, [None], name='sequence_lens')
         self.placeholders['target_weights'] = tf.placeholder(tf.float32, [None, self.max_output_len], name='target_weights')
         super().prepare_specific_graph_model()
 
@@ -61,7 +61,7 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
             for g in data:
                 self.max_num_vertices = max(self.max_num_vertices, max([v for e in g['graph'] for v in [e[0], e[2]]]))
                 self.max_output_len = max(self.max_output_len, g['output'].shape[0])
-                self.target_vocab_size = max(self.target_vocab_size, np.max(data[0]['output'])+1) 
+                self.target_vocab_size = max(self.target_vocab_size, np.max(g['output'])+1 if len(g['output'])>0 else 0) 
                 num_fwd_edge_types = max(num_fwd_edge_types, max([e[1] for e in g['graph']]))
 
 
@@ -90,6 +90,7 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
                                      "decoder_inputs": decoder_input,
                                      "sequence_len": sequence_len})
 
+        print(processed_graphs[0]['decoder_inputs'])
         return processed_graphs
 
     def make_minibatch_iterator(self, data: Any, is_training: bool):
@@ -192,7 +193,8 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
 
         decoder_emb_inp = tf.nn.embedding_lookup(tf.transpose(output_embeddings), 
                                                  self.placeholders['decoder_inputs'])
-
+        
+        tf.stop_gradient(decoder_emb_inp)
         helper = tf.contrib.seq2seq.TrainingHelper(decoder_emb_inp, 
                                                    self.placeholders['sequence_lens'], 
                                                    time_major=False)
@@ -202,6 +204,7 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
                                                   output_layer=projection_layer)
 
         outputs, _, _= tf.contrib.seq2seq.dynamic_decode(decoder, ...)
+        self.ops['outputs'] = outputs.rnn_output
         return outputs.rnn_output
 
     def get_loss(self, computed_logits, expected_outputs):
@@ -211,8 +214,10 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
 
 
     def get_accuracy(self, computed_logits, expected_outputs):
+        self.ops['outputs'] = tf.cast(expected_outputs, tf.int32)
         crossent = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.cast(expected_outputs, tf.int32), 
                                                                   logits=computed_logits)
+        self.ops['outputs'] = tf.shape(computed_logits)
         return tf.exp(tf.reduce_sum(crossent * self.placeholders['target_weights'] ) / tf.cast(self.placeholders['num_graphs'], tf.float32))
  
 

@@ -31,6 +31,7 @@ from networkx.drawing.nx_agraph import write_dot
 import numpy as np
 import matplotlib.pyplot as plt
 
+from graph2sequence.base.utils import Vectorizer
 from ast_graph_generator import AstGraphGenerator
 from sklearn.feature_extraction.text import CountVectorizer
 
@@ -66,31 +67,30 @@ def plot_code_graph(snippet):
     plt.draw()
     plt.show()
 
-def process_data(input, output, task_type, input_vectorizer, output_vectorizer):
+def process_data(inputs, outputs, task_type, input_vectorizer, output_vectorizer):
     data, graph_node_labels, docs_words = ([], [], [])
     num_inits, errors = (0,0)
     doc_tokenizer = CountVectorizer().build_tokenizer()
-    decl
-
-    for idx, (funct, doc) in enumerate(zip(functs, docs)):
+    
+    for idx, (inp, output) in enumerate(zip(inputs, outputs)):
         try:
             visitor = AstGraphGenerator() 
-            visitor.visit(parse(funct))
+            visitor.visit(parse(inp))
 
             edge_list = [(origin, t, destination) for (origin, destination), edges in visitor.graph.items() for t in edges]
 
             if task_type == "func-doc":
-                docs_words.append(doc_tokenizer(doc))
+                docs_words.append(doc_tokenizer(output))
             if task_type == "body-decl":
-                docs_words.append(decl_tokenizer(doc))
+                docs_words.append(decl_tokenizer(output))
 
             graph_node_labels.append([label for _, label in sorted(visitor.node_label.items())])
             data.append({"graph":edge_list})
 
-        except:
+        except Exception as e:
             errors += 1
 
-    print("Generated %d graphs out of %d snippets" % (len(functions) - errors, len(functions)))
+    print("Generated %d graphs out of %d snippets" % (len(inputs) - errors, len(inputs)))
 
     all_node_labels = [splitter(label) for label in itertools.chain.from_iterable(graph_node_labels)]
     all_words = [{word: 1} for word in itertools.chain.from_iterable(docs_words)]
@@ -129,10 +129,10 @@ if __name__ == "__main__":
     task_type = args.get('--task_type') or "func-doc"
     split = args.get('--split') or "train"
     output_file = args.get('--output_file') or "graphs-" + task_type + "-" + split + ".json"
-    input_vectorizer = args.get('--load-input-vec')
-    save_input_vect = args.get('--save-input-vec')
-    output_vectorizer = args.get('--load-output-vec')
-    save_output_vect = args.get('--save-output-vec')
+    input_vectorizer = args.get('--load-input-vect')
+    save_input_vect = args.get('--save-input-vect')
+    output_vectorizer = args.get('--load-output-vect')
+    save_output_vect = args.get('--save-output-vect')
     print_example = args.get('--print-example')
 
 
@@ -148,10 +148,12 @@ if __name__ == "__main__":
     labels = [label.replace("DCNL ", "\n").replace("DCSP ", "\t") for label in labels]
 
     if input_vectorizer is not None:
+        print("Loading input vectorizer")
         with open(input_vectorizer, 'rb') as f:
             input_vectorizer = pickle.load(f)
 
     if output_vectorizer is not None:
+        print("Loading output vectorizer")
         with open(output_vectorizer, 'rb') as f:
             output_vectorizer = pickle.load(f)
     
@@ -159,10 +161,12 @@ if __name__ == "__main__":
                                                              input_vectorizer, output_vectorizer)
 
     if save_input_vect is not None:
+        print("Saving input vectorizer")
         with open(save_input_vect, 'wb') as f:
             pickle.dump(input_vectorizer, f)
 
     if save_output_vect is not None:
+        print("Saving output vectorizer")
         with open(save_output_vect, 'wb') as f:
             pickle.dump(output_vectorizer, f)
 

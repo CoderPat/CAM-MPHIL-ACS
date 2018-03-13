@@ -51,7 +51,6 @@ class ClassificationGNN(BaseEmbeddingsGNN):
         return tf.sparse_tensor_dense_matmul(graph_nodes, gated_outputs) # [g c]
 
 
-
     def get_output(self, last_h):
         with tf.variable_scope("regression_gate"):
             self.weights['regression_gate'] = MLP(self.params['hidden_size'], self.output_shape[0], [],
@@ -74,7 +73,6 @@ class ClassificationGNN(BaseEmbeddingsGNN):
         correct_prediction = tf.equal(tf.argmax(computed_logits,1), tf.argmax(target_classes,1))
         return tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
         
-
 
 def main():
     try:

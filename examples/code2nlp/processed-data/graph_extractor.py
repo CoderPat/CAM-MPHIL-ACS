@@ -7,21 +7,21 @@ Options:
     -h --help                Show this screen.
     --code_data FILE         Prefix of the code data location 
     --label_data FILE        Prefix of the label data location 
-    --split TYPE             The split suffix of the code and label data (train/valid/test)
+    --task_type TYPE         Type of the task [func-doc|body-decl]
+    --split TYPE             The split suffix of the code and label data [train|valid|test]
     --load-input-vect FILE   File to load a previously created vectorizer for encoding token labels.
     --save-input-vect FILE   File to save the created vectorizer for encoding token labels.
     --load-output-vect FILE  File to load a previously created vectorizer for encoding code descriptions.
     --save-output-vect FILE  File to save the created vectorizer for encoding code descriptions.
 """
 from ast import *
-from re import finditer, split as re_split
+import re
 from collections import defaultdict
 from docopt import docopt
 import gc
 import json
 import itertools
 import pickle
-import progressbar
 
 from scipy.sparse import csr_matrix
 
@@ -34,43 +34,19 @@ import matplotlib.pyplot as plt
 from ast_graph_generator import AstGraphGenerator
 from sklearn.feature_extraction.text import CountVectorizer
 
-class Vectorizer:
-    def __init__(self, minimum_frequency=2):
-        self.__minimum_frequency = minimum_frequency
-        self.__dictionary = None
-        self.__reverse_dictionary = None
-    
-    def build_and_vectorize(self, term_dics):
-        self.__dictionary = {}
-        counts = defaultdict(lambda: 0)
-        for term_dict in term_dics:
-            for term in term_dict.keys():
-                counts[term] += 1
-                if counts[term] == self.__minimum_frequency:
-                    self.__dictionary[term] = len(self.__dictionary)+1
-
-        self.__reversed_dictionary = dict(zip(self.__dictionary.values(), self.__dictionary.keys()))
-        return self.vectorize(term_dics)
-        
-    def vectorize(self, term_dics):
-        indices, indptr, values = ([], [0], [])
-        for term_dict in term_dics:
-            for term, frequency in term_dict.items():
-                indices.append(self.__dictionary[term] if term in self.__dictionary else 0)
-                values.append(frequency)
-            indptr.append(indptr[-1]+len(term_dict))
-        
-        return csr_matrix((values, indices, indptr), (len(term_dics), len(self.__dictionary)+1))
-
 
 def splitter(identifier):
-    identifiers = re_split('_|-', identifier)
+    identifiers = re.split('_|-', identifier)
     subtoken_dict = defaultdict(lambda: 0)
     for identifier in identifiers:
-        matches = finditer('.+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)', identifier)
+        matches = re.finditer('.+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)', identifier)
         for subtoken in [m.group(0).lower() for m in matches]:
             subtoken_dict[subtoken] += 1
     return dict(subtoken_dict)
+
+def decl_tokenizer(decl):
+    function_name = re.search('(?<=def )[\w_-]+(?=\(.*\):)', decl).group(0)
+    return splitter(function_name)
 
 def plot_code_graph(snippet):
     print(snippet)
@@ -90,10 +66,11 @@ def plot_code_graph(snippet):
     plt.draw()
     plt.show()
 
-def process_data(functs, docs, input_vectorizer, output_vectorizer):
+def process_data(input, output, task_type, input_vectorizer, output_vectorizer):
     data, graph_node_labels, docs_words = ([], [], [])
     num_inits, errors = (0,0)
-    tokenizer = CountVectorizer().build_tokenizer()
+    doc_tokenizer = CountVectorizer().build_tokenizer()
+    decl
 
     for idx, (funct, doc) in enumerate(zip(functs, docs)):
         try:
@@ -102,7 +79,11 @@ def process_data(functs, docs, input_vectorizer, output_vectorizer):
 
             edge_list = [(origin, t, destination) for (origin, destination), edges in visitor.graph.items() for t in edges]
 
-            docs_words.append(tokenizer(doc))
+            if task_type == "func-doc":
+                docs_words.append(doc_tokenizer(doc))
+            if task_type == "body-decl":
+                docs_words.append(decl_tokenizer(doc))
+
             graph_node_labels.append([label for _, label in sorted(visitor.node_label.items())])
             data.append({"graph":edge_list})
 
@@ -145,21 +126,26 @@ if __name__ == "__main__":
     args = docopt(__doc__)
     code_data = args.get('--code_data') or "../data/V2/repo_split/repo_split.parallel_methods_declbodies"
     label_data = args.get('--label_data') or "../data/V2/repo_split/repo_split.parallel_methods_desc"
+    task_type = args.get('--task_type') or "func-doc"
     split = args.get('--split') or "train"
-    output_file = args.get('--output_file') or "graphs-" + split + ".json"
+    output_file = args.get('--output_file') or "graphs-" + task_type + "-" + split + ".json"
     input_vectorizer = args.get('--load-input-vec')
     save_input_vect = args.get('--save-input-vec')
     output_vectorizer = args.get('--load-output-vec')
     save_output_vect = args.get('--save-output-vec')
     print_example = args.get('--print-example')
 
-    with open(code_data + "." + split) as f:
-        functions = f.readlines()
-    with open(label_data + "." + split, errors='ignore') as f:
-        docs = f.readlines()
 
-    functions = [function.replace("DCNL ", "\n").replace("DCSP ", "\t") for function in functions]
-    docs = [doc.replace("DCNL ", "\n").replace("DCSP ", "\t") for doc in docs]
+    with open(code_data + "." + split) as f:
+        inputs = f.readlines()
+    with open(label_data + "." + split, errors='ignore') as f:
+        labels = f.readlines()
+
+    inputs = [inp.replace("DCNL ", "\n").replace("DCSP ", "\t") for inp in inputs]
+    if task_type == 'body-decl':
+        inputs = ["\n".join([line[1:] for line in inp.split("\n")]) for inp in inputs]
+
+    labels = [label.replace("DCNL ", "\n").replace("DCSP ", "\t") for label in labels]
 
     if input_vectorizer is not None:
         with open(input_vectorizer, 'rb') as f:
@@ -169,7 +155,8 @@ if __name__ == "__main__":
         with open(output_vectorizer, 'rb') as f:
             output_vectorizer = pickle.load(f)
     
-    data, input_vectorizer, output_vectorizer = process_data(functions, docs, input_vectorizer, output_vectorizer)
+    data, input_vectorizer, output_vectorizer = process_data(inputs, labels, task_type, 
+                                                             input_vectorizer, output_vectorizer)
 
     if save_input_vect is not None:
         with open(save_input_vect, 'wb') as f:
@@ -181,7 +168,3 @@ if __name__ == "__main__":
 
     with open(output_file, "w") as f:
         json.dump(data, f)
-    
-"""
-
-"""

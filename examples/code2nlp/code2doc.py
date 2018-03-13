@@ -49,8 +49,8 @@ def load_data(data_dir, file_name, restrict = None):
 def main():
     args = docopt(__doc__)
     data_dir = args.get('--data-dir') or './'
-    train_data = args.get('--training-data') or "processed-data/graphs-valid.json"
-    valid_data = args.get('--validation-data') or "processed-data/graphs-valid.json"
+    train_data = args.get('--training-data') or "processed-data/graphs-func-doc-train.json"
+    valid_data = args.get('--validation-data') or "processed-data/graphs-func-doc-valid.json"
 
     train_data = load_data(data_dir, train_data)
     valid_data = load_data(data_dir, valid_data)

@@ -7,10 +7,48 @@ import threading
 
 SMALL_NUMBER = 1e-7
 
-
 def glorot_init(shape):
     initialization_range = np.sqrt(6.0 / (shape[-2] + shape[-1]))
     return np.random.uniform(low=-initialization_range, high=initialization_range, size=shape).astype(np.float32)
+
+class Vectorizer:
+    def __init__(self, minimum_frequency=2):
+        self.__minimum_frequency = minimum_frequency
+        self.__dictionary = None
+        self.__reverse_dictionary = None
+    
+    def build_and_vectorize(self, term_dics):
+        self.__dictionary = {}
+        counts = defaultdict(lambda: 0)
+        for term_dict in term_dics:
+            for term in term_dict.keys():
+                counts[term] += 1
+                if counts[term] == self.__minimum_frequency:
+                    self.__dictionary[term] = len(self.__dictionary)+1
+
+        self.__reversed_dictionary = dict(zip(self.__dictionary.values(), self.__dictionary.keys()))
+        return self.vectorize(term_dics)
+        
+    def vectorize(self, term_dics, indices_only=False):
+        indices, indptr, values = ([], [0], [])
+        for term_dict in term_dics:
+            for term, frequency in term_dict.items():
+                indices.append(self.__dictionary[term] if term in self.__dictionary else 0)
+                values.append(frequency)
+            indptr.append(indptr[-1]+len(term_dict))
+        
+        if indices_only:
+            return indices
+        else
+            return csr_matrix((values, indices, indptr), (len(term_dics), len(self.__dictionary)+1))
+
+    def devectorize(self, vectors, indices_only=False):
+        term_dics = []
+        if indices_only:
+            for index in vectors:
+                term_dics.append({self.__reverse_dictionary[index]: 1})
+        return term_dics
+            
 
 
 class ThreadedIterator:

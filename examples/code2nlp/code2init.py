@@ -27,8 +27,15 @@ import pdb
 
 from graph2sequence.others.classification_gnn import ClassificationGNN
 
+def is_init(vectorizer, decl_vector):
+    terms = vectorizer.devectorize(decl_vector, indices_only=True)
+    return len(terms) == 1 and 'init' in terms and terms['init'] == 1
+
 def load_data(data_dir, file_name, restrict = None):
     full_path = os.path.join(data_dir, file_name)
+    if save_output_vect is not None:
+        with open("processed-data/output-vect.pkl", 'rb') as f:
+            vectorizer = pickle.load(f)
 
     print("Loading data from %s" % full_path)
     with open(full_path, 'r') as f:
@@ -40,7 +47,7 @@ def load_data(data_dir, file_name, restrict = None):
         g["graph"] = d["graph"]
         (data, indices, indptr, shape) = d["node_features"]
         g["node_features"] = csr_matrix((data, indices, indptr), shape)
-        g["output"] = np.eye(2)[int(d["label"])]
+        g["output"] = np.eye(2)[int(is_init(vectorizer, d['output_features']))]
         new_data.append(g)
 
     return new_data
@@ -49,8 +56,8 @@ def load_data(data_dir, file_name, restrict = None):
 def main():
     args = docopt(__doc__)
     data_dir = args.get('--data-dir') or './'
-    train_data = args.get('--training-data') or "processed-data/graphs-train.json"
-    valid_data = args.get('--validation-data') or "processed-data/graphs-valid.json"
+    train_data = args.get('--training-data') or "processed-data/graphs-body-decl-train.json"
+    valid_data = args.get('--validation-data') or "processed-data/graphs-body-decl-valid.json"
 
     train_data = load_data(data_dir, train_data)
     valid_data = load_data(data_dir, valid_data)

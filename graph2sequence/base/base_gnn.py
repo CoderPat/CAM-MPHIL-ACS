@@ -190,7 +190,7 @@ class BaseGNN(object):
             processed_graphs += num_graphs
             if is_training:
                 batch_data[self.placeholders['out_layer_dropout_keep_prob']] = self.params['out_layer_dropout_keep_prob']
-                metric_ops = zip(*self.metric)[1]
+                metric_ops = zip(*self.metrics)[1]
                 fetch_list = [self.ops['loss']] + metric_ops + [self.ops['train_step']]
             else:
                 batch_data[self.placeholders['out_layer_dropout_keep_prob']] = 1.0

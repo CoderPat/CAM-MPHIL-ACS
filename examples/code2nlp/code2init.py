@@ -1,6 +1,6 @@
 """
 Usage:
-    chem_tensorflow_sparse.py [options]
+    code2init.py [options]
 
 Options:
     -h --help                Show this screen.
@@ -10,6 +10,8 @@ Options:
     --data_dir DIR           Data dir name.
     --restore FILE           File to restore weights from.
     --freeze-graph-model     Freeze weights of graph model components.
+    --training-data FILE     Location of the training data
+    --validation-data FILE   Location of the training data
 """
 
 from typing import List, Tuple, Dict, Sequence, Any

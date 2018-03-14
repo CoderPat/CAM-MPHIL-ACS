@@ -69,9 +69,9 @@ class ClassificationGNN(BaseEmbeddingsGNN):
                                                                         logits=computed_logits))
         return tf.reduce_mean(cross_entropies)
 
-    def get_accuracy(self, computed_logits, target_classes):
+    def get_metrics(self, computed_logits, target_classes):
         correct_prediction = tf.equal(tf.argmax(computed_logits,1), tf.argmax(target_classes,1))
-        return tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+        return ['acc: %.5f', tf.reduce_mean(tf.cast(correct_prediction, tf.float32))]
         
 
 def main():

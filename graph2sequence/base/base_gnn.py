@@ -135,7 +135,7 @@ class BaseGNN(object):
         self.ops['losses'] = []
         with tf.variable_scope("out_layer"):
             computed_outputs = self.get_output(self.ops['final_node_representations'])
-            self.ops['accuracy'] = self.get_accuracy(computed_outputs, self.placeholders['target_values'])
+            self.metrics = self.get_metrics(computed_outputs, self.placeholders['target_values'])
             self.ops['loss'] = self.get_loss(computed_outputs, self.placeholders['target_values'])
 
     def make_train_step(self):
@@ -164,7 +164,7 @@ class BaseGNN(object):
     def get_output(self, last_h) -> tf.Tensor:
         raise Exception("Models have to implement layers after hidden node representation!")
 
-    def get_accuracy(self, computed_outputs, target_outputs) -> tf.Tensor:
+    def get_metrics(self, computed_outputs, target_outputs):
         raise Exception("")
 
     def get_loss(self, computed_outputs, target_outputs) -> tf.Tensor:
@@ -181,7 +181,7 @@ class BaseGNN(object):
 
     def run_epoch(self, epoch_name: str, data, is_training: bool):
         loss = 0
-        accuracies = []
+        batch_metrics = []
         start_time = time.time()
         processed_graphs = 0
         batch_iterator = ThreadedIterator(self.make_minibatch_iterator(data, is_training), max_queue_size=5)
@@ -190,14 +190,15 @@ class BaseGNN(object):
             processed_graphs += num_graphs
             if is_training:
                 batch_data[self.placeholders['out_layer_dropout_keep_prob']] = self.params['out_layer_dropout_keep_prob']
-                fetch_list = [self.ops['loss'], self.ops['accuracy'], self.ops['train_step']]
+                metric_ops = zip(*self.metric)[1]
+                fetch_list = [self.ops['loss']] + metric_ops + [self.ops['train_step']]
             else:
                 batch_data[self.placeholders['out_layer_dropout_keep_prob']] = 1.0
                 fetch_list = [self.ops['loss'], self.ops['accuracy']]
+
             result = self.sess.run(fetch_list, feed_dict=batch_data)
-            (batch_loss, batch_accuracy) = (result[0], result[1])
-            loss += batch_loss * num_graphs
-            accuracies.append(batch_accuracy * num_graphs)
+            loss += result[0] * num_graphs
+            batch_metrics.append((result[1:-1] if is_training else result[1:] * num_graphs)) 
 
             print("Running %s, batch %i (has %i graphs). Loss so far: %.4f" % (epoch_name,
                                                                                step,
@@ -205,10 +206,10 @@ class BaseGNN(object):
                                                                                loss / processed_graphs),
                   end='\r')
 
-        accuracies = np.sum(accuracies) / processed_graphs
+        metrics = np.sum(np.array(batch_metrics), axis=0) / processed_graphs
         loss = loss / processed_graphs
         instance_per_sec = processed_graphs / (time.time() - start_time)
-        return loss, accuracies, instance_per_sec
+        return loss, metrics, instance_per_sec
 
     def train(self, train_data, valid_data):
         # Load data:
@@ -233,23 +234,24 @@ class BaseGNN(object):
                 (best_val_acc, best_val_acc_epoch) = (float("+inf"), 0)
             for epoch in range(1, self.params['num_epochs'] + 1):
                 print("== Epoch %i" % epoch)
-                train_loss, train_acc, train_speed = self.run_epoch("epoch %i (training)" % epoch,
+                metric_format = " | ".join(zip(*self.metrics)[0])
+                train_loss, train_metrics, train_speed = self.run_epoch("epoch %i (training)" % epoch,
                                                                                  self.train_data, True)
-                print("\r\x1b[K Train: loss: %.5f | acc: %.5f | instances/sec: %.2f" % (train_loss,
-                                                                                        train_acc,
-                                                                                        train_speed))
-                valid_loss, valid_acc, valid_speed = self.run_epoch("epoch %i (validation)" % epoch,
+
+                train_results = (train_loss,) + tuple(train_metrics) + (train_speed,)
+                print("\r\x1b[K Train: loss: %.5f | " + metric_format + " | instances/sec: %.2f" % train_results)
+                valid_loss, valid_metrics, valid_speed = self.run_epoch("epoch %i (validation)" % epoch,
                                                                                  self.valid_data, False)
-                print("\r\x1b[K Valid: loss: %.5f | acc: %s | instances/sec: %.2f" % (valid_loss,
-                                                                                      valid_acc,
-                                                                                      valid_speed))
+
+                valid_results = (valid_loss,) + tuple(valid_metrics) + (valid_speed,)
+                print("\r\x1b[K Valid: loss: %.5f | " + metric_format + " | instances/sec: %.2f" % valid_results)
 
                 epoch_time = time.time() - total_time_start
                 log_entry = {
                     'epoch': epoch,
                     'time': epoch_time,
-                    'train_results': (train_loss, train_acc, train_speed),
-                    'valid_results': (valid_loss, valid_acc, valid_speed),
+                    'train_results': train_results,
+                    'valid_results': valid_loss,
                 }
                 log_to_save.append(log_entry)
                 with open(self.log_file, 'w') as f:

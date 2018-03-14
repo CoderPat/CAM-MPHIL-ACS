@@ -135,7 +135,8 @@ class BaseGNN(object):
         self.ops['losses'] = []
         with tf.variable_scope("out_layer"):
             computed_outputs = self.get_output(self.ops['final_node_representations'])
-            self.extra_ops = self.get_extra_ops(computed_outputs, self.placeholders['target_values'])
+            self.extra_train_ops = self.get_extra_train_ops(computed_outputs, self.placeholders['target_values'])
+            self.extra_valid_ops = self.get_extra_valid_ops(computed_outputs, self.placeholders['target_values'])
             self.ops['loss'] = self.get_loss(computed_outputs, self.placeholders['target_values'])
 
     def make_train_step(self):
@@ -164,16 +165,13 @@ class BaseGNN(object):
     def get_output(self, last_h) -> tf.Tensor:
         raise Exception("Models have to implement layers after hidden node representation!")
 
-    def get_extra_ops(self, computed_outputs, target_outputs):
-        raise Exception("")
+    def get_extra_train_ops(self, computed_outputs, target_outputs):
+        return []
+    
+    def get_extra_valid_ops(self, computed_outputs, target_outputs):
+        return []
 
     def get_loss(self, computed_outputs, target_outputs) -> tf.Tensor:
-        raise Exception("")
-
-    def get_train_log(self, loss, speed, extra_results):
-        raise Exception("")
-    
-    def get_valid_log(self, loss, speed, extra_results):
         raise Exception("")
 
     def prepare_specific_graph_model(self) -> None:
@@ -184,6 +182,12 @@ class BaseGNN(object):
 
     def make_minibatch_iterator(self, data: Any, is_training: bool):
         raise Exception("Models have to implement make_minibatch_iterator!")
+
+    def get_train_log(self, loss, speed, extra_results):
+        return "Train: loss: %.5f" , loss
+    
+    def get_valid_log(self, loss, speed, extra_results):
+        return "Valid: loss: %.5f" , loss
 
     def run_epoch(self, epoch_name: str, data, is_training: bool):
         loss = 0
@@ -196,10 +200,10 @@ class BaseGNN(object):
             processed_graphs += num_graphs
             if is_training:
                 batch_data[self.placeholders['out_layer_dropout_keep_prob']] = self.params['out_layer_dropout_keep_prob']
-                fetch_list = [self.ops['loss'], self.ops['train_step']] + self.extra_ops
+                fetch_list = [self.ops['loss'], self.ops['train_step']] + self.extra_train_ops
             else:
                 batch_data[self.placeholders['out_layer_dropout_keep_prob']] = 1.0
-                fetch_list = [self.ops['loss']] + self.extra_ops
+                fetch_list = [self.ops['loss']] + self.extra_valid_ops
 
             result = self.sess.run(fetch_list, feed_dict=batch_data)
             loss += result[0] * num_graphs

@@ -32,6 +32,7 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
     """
     def __init__(self, args):
         super().__init__(args)
+        self.batch_raw_targets = []
 
     @classmethod
     def default_params(cls):
@@ -87,6 +88,7 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
                                      "num_incoming_edge_per_type": num_incoming_edge_per_type,
                                      "init": d["node_features"],
                                      "targets": decoder_input[1:],
+                                     "raw_targets": d['output']
                                      "decoder_inputs": decoder_input,
                                      "sequence_len": sequence_len})
 
@@ -105,6 +107,7 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
             num_graphs_in_batch = 0
             batch_node_features = None
             batch_target_task_values = []
+            batch_raw_targets = []
             batch_decoder_inputs = []
             batch_target_task_mask = []
             batch_sequence_lens = []
@@ -132,6 +135,7 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
                 batch_num_incoming_edges_per_type.append(num_incoming_edges_per_type)
 
                 batch_target_task_values.append(cur_graph['targets'])
+                batch_raw_targets.append(cur_graph['raw_targets'])
                 batch_decoder_inputs.append(cur_graph['decoder_inputs'])
                 batch_sequence_lens.append(cur_graph['sequence_len'])
                 batch_target_weights.append(cur_graph['sequence_len'] * [1] + (self.max_output_len - cur_graph['sequence_len'])*[0])
@@ -161,6 +165,7 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
                     adj_list = np.zeros((0, 2), dtype=np.int32)
                 batch_feed_dict[self.placeholders['adjacency_lists'][i]] = adj_list
 
+            self.batch_raw_targets.append(batch_raw_targets)
             yield batch_feed_dict
 
     def get_output(self, last_h):
@@ -194,7 +199,6 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
         decoder_emb_inp = tf.nn.embedding_lookup(tf.transpose(output_embeddings), 
                                                  self.placeholders['decoder_inputs'])
         
-        tf.stop_gradient(decoder_emb_inp)
         helper = tf.contrib.seq2seq.TrainingHelper(decoder_emb_inp, 
                                                    self.placeholders['sequence_lens'], 
                                                    time_major=False)
@@ -212,13 +216,14 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
                                                                   logits=computed_logits)
         return tf.reduce_sum(crossent * self.placeholders['target_weights'] ) / tf.cast(self.placeholders['num_graphs'], tf.float32)
 
+    def get_extra_valid_ops(self, computed_logits, target_classes):
 
-    def get_accuracy(self, computed_logits, expected_outputs):
-        self.ops['outputs'] = tf.cast(expected_outputs, tf.int32)
-        crossent = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.cast(expected_outputs, tf.int32), 
-                                                                  logits=computed_logits)
-        self.ops['outputs'] = tf.shape(computed_logits)
-        return tf.exp(tf.reduce_sum(crossent * self.placeholders['target_weights'] ) / tf.cast(self.placeholders['num_graphs'], tf.float32))
+    
+    def get_valid_log(self, loss, speed, extra_results):
+        self.batch_raw_targets.append(batch_raw_targets)
+        accuracy = self.get_accuracy(extra_results)
+        self.batch_raw_targets = []
+        return "Valid: loss: %.5f | acc: %.5f | instances/sec: %.2f", (loss, accuracy, speed)
  
 
 

@@ -18,7 +18,7 @@ class BaseGNN(object):
         return {
             'num_epochs': 3000,
             'patience': 25,
-            'learning_rate': 0.001,
+            'learning_rate': 0.0005,
             'clamp_gradient_norm': 1.0,
             'out_layer_dropout_keep_prob': 1.0,
 
@@ -121,23 +121,23 @@ class BaseGNN(object):
     def make_model(self):
         self.placeholders['target_values'] = tf.placeholder(tf.float32, [None] + list(self.output_shape),
                                                             name='target_values')
-        self.placeholders['num_graphs'] = tf.placeholder(tf.int64, [], name='num_graphs')
+        self.placeholders['num_graphs'] = tf.placeholder(tf.int32, [], name='num_graphs')
         self.placeholders['out_layer_dropout_keep_prob'] = tf.placeholder(tf.float32, [], name='out_layer_dropout_keep_prob')
 
         with tf.variable_scope("graph_model"):
             self.prepare_specific_graph_model()
             # This does the actual graph work:
-            if self.params['use_graph']:
-                self.ops['final_node_representations'] = self.compute_final_node_representations()
-            else:
-                self.ops['final_node_representations'] = tf.zeros_like(self.placeholders['initial_node_representation'])
+            self.ops['final_node_representations'] = self.compute_final_node_representations()
+            if not self.params['use_graph']:
+                self.ops['final_node_representations'] = tf.zeros_like(self.ops['final_node_representations'])
 
         self.ops['losses'] = []
         with tf.variable_scope("out_layer"):
             computed_outputs = self.get_output(self.ops['final_node_representations'])
+            self.ops['loss'] = self.get_loss(computed_outputs, self.placeholders['target_values'])
             self.extra_train_ops = self.get_extra_train_ops(computed_outputs, self.placeholders['target_values'])
             self.extra_valid_ops = self.get_extra_valid_ops(computed_outputs, self.placeholders['target_values'])
-            self.ops['loss'] = self.get_loss(computed_outputs, self.placeholders['target_values'])
+
 
     def make_train_step(self):
         trainable_vars = self.sess.graph.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
@@ -251,7 +251,7 @@ class BaseGNN(object):
                 valid_loss, valid_results, valid_speed = self.run_epoch("epoch %i (validation)" % epoch,
                                                                                  self.valid_data, False)
 
-                format_string, valid_log = self.get_train_log(valid_loss, valid_speed, valid_results)
+                format_string, valid_log = self.get_valid_log(valid_loss, valid_speed, valid_results)
                 print(("\r\x1b[K " + format_string) % valid_log)
 
                 epoch_time = time.time() - total_time_start

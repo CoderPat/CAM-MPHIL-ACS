@@ -30,6 +30,7 @@ class ClassificationGNN(BaseEmbeddingsGNN):
     """
     def __init__(self, args):
         super().__init__(args)
+        self.accuracy_op = None
 
     @classmethod
     def default_params(cls):
@@ -69,9 +70,17 @@ class ClassificationGNN(BaseEmbeddingsGNN):
                                                                         logits=computed_logits))
         return tf.reduce_mean(cross_entropies)
 
-    def get_extra_ops(self, computed_logits, target_classes):
-        correct_prediction = tf.equal(tf.argmax(computed_logits,1), tf.argmax(target_classes,1))
-        return [tf.reduce_mean(tf.cast(correct_prediction, tf.float32))]
+    def get_extra_train_ops(self, computed_logits, target_classes):
+        if self.accuracy is None:
+            correct_prediction = tf.equal(tf.argmax(computed_logits,1), tf.argmax(target_classes,1))
+            self.accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+        return [self.accuracy]
+
+    def get_extra_valid_ops(self, computed_logits, target_classes):
+        if self.accuracy is None:
+            correct_prediction = tf.equal(tf.argmax(computed_logits,1), tf.argmax(target_classes,1))
+            self.accuracy = [tf.reduce_mean(tf.cast(correct_prediction, tf.float32))]
+        return [self.accuracy]
 
     def get_accuracy(self, extra_results): 
         results, num_graphs = zip(*extra_results)

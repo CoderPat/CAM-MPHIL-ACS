@@ -39,10 +39,10 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
     def default_params(cls):
         params = dict(super().default_params())
         params.update({
-            'batch_size': 5000,
+            'batch_size': 50000,
             'decoder_rnn_cell': 'gru',         # (num_classes)
             'max_output_len': 10,
-            'learning_rate': 0.001,
+            'learning_rate': 0.005,
             'clamp_gradient_norm': 1.0,
             'out_layer_dropout_keep_prob': 1.0,
 

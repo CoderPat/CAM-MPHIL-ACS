@@ -22,7 +22,7 @@ import tensorflow as tf
 import sys, traceback
 import pdb
 
-from scipy.sparse import vstack
+from scipy.sparse import vstack, csr_matrix
 from .base.base_embeddings_gnn import BaseEmbeddingsGNN
 from .base.utils import glorot_init, MLP, compute_bleu
 
@@ -117,7 +117,7 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
         num_graphs = 0
         while num_graphs < len(data):
             num_graphs_in_batch = 0
-            batch_node_features = None
+            batch_node_features = csr_matrix(np.empty(shape=(0,data[0]['init'].shape[1])))
             batch_target_task_values = []
             batch_raw_targets = []
             batch_decoder_inputs = []
@@ -131,7 +131,7 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
             while num_graphs < len(data) and node_offset + data[num_graphs]['init'].shape[0] < self.params['batch_size']:
                 cur_graph = data[num_graphs]
                 num_nodes_in_graph = cur_graph['init'].shape[0]
-                batch_node_features = vstack([batch_node_features, cur_graph['init']]) if num_graphs >= 1 else cur_graph['init']
+                batch_node_features = vstack([batch_node_features, cur_graph['init']])
                 batch_graph_nodes_list.extend(
                     (num_graphs_in_batch, node_offset + i) for i in range(num_nodes_in_graph))
                 for i in range(self.num_edge_types):

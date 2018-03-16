@@ -599,7 +599,7 @@ class AstGraphGenerator(NodeVisitor):
 
     def generator_visit(left, right):
         def visit(self, node):
-            nid = self.non_terminal(node, 42)
+            nid = self.non_terminal(node)
             gparent, self.parent = self.parent, nid
             self.terminal(left)
             self.visit(node.elt)

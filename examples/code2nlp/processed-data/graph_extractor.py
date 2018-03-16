@@ -36,18 +36,23 @@ from ast_graph_generator import AstGraphGenerator
 from sklearn.feature_extraction.text import CountVectorizer
 
 
-def splitter(identifier):
+def splitter(identifier, ordered=False):
     identifiers = re.split('_|-', identifier)
     subtoken_dict = defaultdict(lambda: 0)
+    subtoken_list = []
     for identifier in identifiers:
         matches = re.finditer('.+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)', identifier)
         for subtoken in [m.group(0).lower() for m in matches]:
-            subtoken_dict[subtoken] += 1
-    return dict(subtoken_dict)
+            if ordered:
+                subtoken_list.append(subtoken)
+            else:
+                subtoken_dict[subtoken] += 1
+            
+    return subtoken_list if ordered else dict(subtoken_dict)
 
 def decl_tokenizer(decl):
     function_name = re.search('(?<=def )[\w_-]+(?=\(.*\):)', decl).group(0)
-    return splitter(function_name)
+    return splitter(function_name, ordered=True)
 
 def plot_code_graph(snippet):
     print(snippet)

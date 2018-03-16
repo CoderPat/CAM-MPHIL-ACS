@@ -32,6 +32,8 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
     def __init__(self, args):
         super().__init__(args)
         self.batch_raw_targets = []
+        self.max_output_len = 0
+        self.target_vocab_size = 0
 
     @classmethod
     def default_params(cls):
@@ -66,8 +68,6 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
         # Get some common data out:
         if self.params['input_shape'] is None or self.params['target_vocab_size'] is None:
             num_fwd_edge_types = 0
-            self.max_output_len = 0
-            self.target_vocab_size = 0
             for g in data:
                 self.max_num_vertices = max(self.max_num_vertices, max([v for e in g['graph'] for v in [e[0], e[2]]]))
                 self.max_output_len = max(self.max_output_len, g['output'].shape[0] + 1)
@@ -91,6 +91,7 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
             (adjacency_lists, num_incoming_edge_per_type) = self._BaseEmbeddingsGNN__graph_to_adjacency_lists(d['graph'])
             sequence_len = d['output'].shape[0] + 1
             pad_size = self.max_output_len - sequence_len
+
             decoder_input = np.concatenate((np.array([self.go_symbol]), 
                                             d['output'],
                                             np.array([self.eos_symbol]),

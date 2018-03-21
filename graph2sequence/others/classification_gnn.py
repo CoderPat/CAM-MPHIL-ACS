@@ -82,19 +82,11 @@ class ClassificationGNN(BaseEmbeddingsGNN):
             self.accuracy = [tf.reduce_mean(tf.cast(correct_prediction, tf.float32))]
         return [self.accuracy]
 
-    def get_accuracy(self, extra_results): 
-        results, num_graphs = zip(*extra_results)
+    def get_log(self, loss, speed, num_graphs, extra_results, _):
         accuracies = np.array([result[0] for result in results]) * np.array(num_graphs)
-        return np.sum(accuracies)/np.sum(np.array(num_graphs))
-
-    def get_train_log(self, loss, speed, extra_results):
-        accuracy = self.get_accuracy(extra_results)
+        accuracy = np.sum(accuracies)/np.sum(np.array(num_graphs))
         return "Train: loss: %.5f | acc: %.5f | instances/sec: %.2f", (loss, accuracy, speed)
     
-    def get_valid_log(self, loss, speed, extra_results):
-        accuracy = self.get_accuracy(extra_results)
-        return "Valid: loss: %.5f | acc: %.5f | instances/sec: %.2f", (loss, accuracy, speed)
-        
 
 def main():
     try:

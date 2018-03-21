@@ -10,6 +10,8 @@ import numpy as np
 import pickle
 import random
 
+from tensorflow.contrib.learn import ModeKeys
+
 from .utils import ThreadedIterator, SMALL_NUMBER
 
 class BaseGNN(object):
@@ -93,7 +95,7 @@ class BaseGNN(object):
             else:
                 self.initialize_model()
 
-    def process_data(self, data, is_training_data: bool):
+    def process_data(self, data, mode):
         restrict = self.args.get("--restrict_data")
         if restrict is not None and restrict > 0:
             data = data[:restrict]
@@ -108,7 +110,7 @@ class BaseGNN(object):
             self.annotation_size = max(self.annotation_size, len(data[0]["node_features"][0]))
             self.output_shape = np.array(data[0]['output']).shape
 
-        return self.process_raw_graphs(data, is_training_data)
+        return self.process_raw_graphs(data, mode)
 
     @staticmethod
     def graph_string_to_array(graph_string: str) -> List[List[int]]:
@@ -131,12 +133,11 @@ class BaseGNN(object):
             if not self.params['use_graph']:
                 self.ops['final_node_representations'] = tf.zeros_like(self.ops['final_node_representations'])
 
-        self.ops['losses'] = []
-        with tf.variable_scope("out_layer"):
-            computed_outputs = self.get_output(self.ops['final_node_representations'])
-            self.ops['loss'] = self.get_loss(computed_outputs, self.placeholders['target_values'])
-            self.extra_train_ops = self.get_extra_train_ops(computed_outputs, self.placeholders['target_values'])
-            self.extra_valid_ops = self.get_extra_valid_ops(computed_outputs, self.placeholders['target_values'])
+        computed_outputs = self.get_output(self.ops['final_node_representations'])
+        self.ops['loss'] = self.get_loss(computed_outputs, self.placeholders['target_values'])
+        self.extra_train_ops = self.get_extra_train_ops(computed_outputs, self.placeholders['target_values'])
+        self.extra_valid_ops = self.get_extra_valid_ops(computed_outputs, self.placeholders['target_values'])
+        self.inference_ops = self.get_inference_ops(computed_outputs)
 
 
     def make_train_step(self):
@@ -168,8 +169,11 @@ class BaseGNN(object):
     def get_extra_train_ops(self, computed_outputs, target_outputs):
         return []
     
-    def get_extra_valid_ops(self, computed_outputs, target_outputs):
+    def get_extra_eval_ops(self, computed_outputs, target_outputs):
         return []
+
+    def get_inference_ops(self, computed_outputs):
+        raise Exception("Models have to specify inference ops")
 
     def get_loss(self, computed_outputs, target_outputs) -> tf.Tensor:
         raise Exception("")
@@ -180,52 +184,74 @@ class BaseGNN(object):
     def compute_final_node_representations(self) -> tf.Tensor:
         raise Exception("Models have to implement compute_final_node_representations!")
 
-    def make_minibatch_iterator(self, data: Any, is_training: bool):
+    def make_minibatch_iterator(self, data: Any, mode: bool):
         raise Exception("Models have to implement make_minibatch_iterator!")
 
-    def get_train_log(self, loss, speed, extra_results):
-        return "Train: loss: %.5f" , loss
-    
-    def get_valid_log(self, loss, speed, extra_results):
-        return "Valid: loss: %.5f" , loss
+    def get_log(self, loss, speed, num_graphs, extra_results, mode):
+        return "loss : %.5f | instances/sec: %.2f", (loss, speed)
 
-    def run_epoch(self, epoch_name: str, data, is_training: bool):
+    def get_checkpoint_metric(self, valid_log):
+        return -valid_log[0]
+
+    def process_inference(self, inference_results, inference_graphs):
+        raise Exception("Models have to implement process_inference")
+
+    def run_epoch(self, epoch_name: str, data, mode):
         loss = 0
         start_time = time.time()
         processed_graphs = 0
         batch_results = []
-        batch_iterator = ThreadedIterator(self.make_minibatch_iterator(data, is_training), max_queue_size=5)
+        batch_graphs = []
+        batch_iterator = ThreadedIterator(self.make_minibatch_iterator(data, mode), max_queue_size=5)
         for step, batch_data in enumerate(batch_iterator):
             num_graphs = batch_data[self.placeholders['num_graphs']]
             processed_graphs += num_graphs
-            if is_training:
+            if mode == ModeKeys.TRAIN:
                 batch_data[self.placeholders['out_layer_dropout_keep_prob']] = self.params['out_layer_dropout_keep_prob']
                 fetch_list = [self.ops['loss'], self.ops['train_step']] + self.extra_train_ops
-            else:
+            elif mode == ModeKeys.EVAL:
                 batch_data[self.placeholders['out_layer_dropout_keep_prob']] = 1.0
                 fetch_list = [self.ops['loss']] + self.extra_valid_ops
+            elif mode == ModeKeys.INFER:
+                batch_data[self.placeholders['out_layer_dropout_keep_prob']] = 1.0
+                fetch_list = self.get_extra_infer_ops
 
             result = self.sess.run(fetch_list, feed_dict=batch_data)
-            loss += result[0] * num_graphs
-            batch_results.append((result[2:] if is_training else result[1:], num_graphs)) 
 
-            print("Running %s, batch %i (has %i graphs). Loss so far: %.4f" % (epoch_name,
-                                                                               step,
-                                                                               num_graphs,
-                                                                               loss / processed_graphs),
-                  end='\r')
+            if mode != ModeKeys.INFER:
+                loss += result[0] * num_graphs
 
-        loss = loss / processed_graphs
+                print("Running %s, batch %i (has %i graphs). Loss so far: %.4f" % (epoch_name,
+                                                                                   step,
+                                                                                   num_graphs,
+                                                                                   loss / processed_graphs),
+                                                                                   end='\r')
+
+            # Submodels handle the extra results so we just pass them along
+            if mode == ModeKeys.TRAIN:
+                extra_results = result[2:]
+            elif mode == ModeKeys.EVAL:
+                extra_results = result[1:]
+            elif mode == ModeKeys.INFER:
+                extra_results = result
+
+            batch_results.append(extra_results)
+            batch_graphs.append(num_graphs)
+
         instance_per_sec = processed_graphs / (time.time() - start_time)
-        return loss, batch_results, instance_per_sec
+        if mode == ModeKeys.INFER:
+            return batch_results, batch_graphs
+        else: 
+            loss = loss / processed_graphs
+            return loss, batch_results, batch_graphs, instance_per_sec
 
     def train(self, train_data, valid_data):
         # Load data:
         self.max_num_vertices = 0
         self.num_edge_types = 0
         self.annotation_size = 0
-        self.train_data = self.process_data(train_data, is_training_data=True)
-        self.valid_data = self.process_data(valid_data, is_training_data=False)
+        self.train_data = self.process_data(train_data, mode=ModeKeys.TRAIN)
+        self.valid_data = self.process_data(valid_data, mode=ModeKeys.EVAL)
 
         if self.graph is None:
             self.build_model()
@@ -234,25 +260,36 @@ class BaseGNN(object):
         total_time_start = time.time()
         with self.graph.as_default():
             if self.args.get('--restore') is not None:
-                _, valid_accs, _, _ = self.run_epoch("Resumed (validation)", self.valid_data, False)
-                #best_val_acc = np.sum(valid_accs)
-                #best_val_acc_epoch = 0
-                #print("\r\x1b[KResumed operation, initial cum. val. acc: %.5f" % best_val_acc)
+                valid_loss, valid_results, valid_graphs, valid_speed = self.run_epoch("Resumed (validation)", 
+                                                                                      self.valid_data, ModeKeys.EVAL)
+
+                format_string, valid_log = self.get_log(valid_loss, valid_speed, valid_graphs, valid_results,
+                                                        ModeKeys.EVAL)
+
+                best_checkpoint_metric = self.get_checkpoint_metric(valid_log)
+                best_epoch = 0
+                print("\r\x1b[KResumed operation, initial val run:" + format_string % valid_log)
             else:
-                (best_val_acc, best_val_acc_epoch) = (float("+inf"), 0)
+                (best_checkpoint_metric, best_epoch) = (None, 0)
+
             for epoch in range(1, self.params['num_epochs'] + 1):
                 print("== Epoch %i" % epoch)
-                train_loss, train_results, train_speed = self.run_epoch("epoch %i (training)" % epoch,
-                                                                                 self.train_data, True)
+                train_loss, train_results, train_graphs, train_speed = self.run_epoch("epoch %i (training)" % epoch,
+                                                                                      self.train_data, ModeKeys.TRAIN)
 
-                format_string, train_log = self.get_train_log(train_loss, train_speed, train_results)
-                print(("\r\x1b[K " + format_string) % train_log)
+                format_string, train_log = self.get_log(train_loss, train_speed, train_graphs, train_results,
+                                                        ModeKeys.TRAIN)
+
+                print(("\r\x1b[K Train: " + format_string) % train_log)
                 #print("\r\x1b[K Train: loss: %.5f | " + metric_format + " | instances/sec: %.2f" % train_results)
-                valid_loss, valid_results, valid_speed = self.run_epoch("epoch %i (validation)" % epoch,
-                                                                                 self.valid_data, False)
+                valid_loss, valid_results, valid_graphs, valid_speed = self.run_epoch("epoch %i (validation)" % epoch,
+                                                                                      self.valid_data, ModeKeys.EVAL)
 
-                format_string, valid_log = self.get_valid_log(valid_loss, valid_speed, valid_results)
-                print(("\r\x1b[K " + format_string) % valid_log)
+
+                format_string, valid_log = self.get_log(valid_loss, valid_speed, valid_graphs, valid_results,
+                                                        ModeKeys.EVAL)
+
+                print(("\r\x1b[K Valid: " + format_string) % valid_log)
 
                 epoch_time = time.time() - total_time_start
                 log_entry = {
@@ -265,14 +302,26 @@ class BaseGNN(object):
                 with open(self.log_file, 'w') as f:
                     json.dump(log_to_save, f, indent=4)
 
-                """if valid_acc < best_val_acc:
+
+                checkpoint_metric = self.get_checkpoint_metric(valid_log)
+                if best_checkpoint_metric is None or checkpoint_metric > best_checkpoint_metric:
                     self.save_model(self.best_model_file)
-                    print("  (Best epoch so far, cum. val. acc decreased to %.5f from %.5f. Saving to '%s')" % (valid_acc, best_val_acc, self.best_model_file))
-                    best_val_acc = valid_acc
-                    best_val_acc_epoch = epoch
-                elif epoch - best_val_acc_epoch >= self.params['patience']:
-                    print("Stopping training after %i epochs without improvement on validation accuracy." % self.params['patience'])
-                    break"""
+                    print("  (Best epoch so far. Saving to '%s')" % (self.best_model_file))
+                    best_checkpoint_metric = checkpoint_metric
+                    best_epoch = epoch
+                elif epoch - best_epoch >= self.params['patience']:
+                    print("Stopping training after %i epochs without improvement on checkpoint metric" % self.params['patience'])
+                    break
+
+    def infer(self, input_data):
+        input_data = self.process_data(input_data, mode=ModeKeys.INFER)
+
+        with self.graph.as_default():
+            infer_results, infer_graphs = self.run_epoch(None, input_data, ModeKeys.INFER)
+
+        return self.process_inference(infer_results, infer_graphs)
+    
+
 
     def save_model(self, path: str) -> None:
         weights_to_save = {}

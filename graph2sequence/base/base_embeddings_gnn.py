@@ -161,14 +161,15 @@ class BaseEmbeddingsGNN(BaseGNN):
 
         return self.process_raw_graphs(data, is_training_data)
 
-    def process_raw_graphs(self, raw_data: Sequence[Any], is_training_data: bool) -> Any:
+    def process_raw_graphs(self, raw_data: Sequence[Any], mode) -> Any:
         processed_graphs = []
         for d in raw_data:
             (adjacency_lists, num_incoming_edge_per_type) = self.__graph_to_adjacency_lists(d['graph'])
             processed_graphs.append({"adjacency_lists": adjacency_lists,
                                      "num_incoming_edge_per_type": num_incoming_edge_per_type,
-                                     "init": d["node_features"],
-                                     "labels": d["output"]})
+                                     "init": d["node_features"]})
+            if mode != ModeKeys.INFER:
+                processed_graphs[-1]["labels"] = d["output"]
 
         return processed_graphs
 
@@ -196,11 +197,12 @@ class BaseEmbeddingsGNN(BaseGNN):
 
         return final_adj_lists, num_incoming_edges_dicts_per_type
 
-    def make_minibatch_iterator(self, data: Any, is_training: bool):
+    def make_minibatch_iterator(self, data: Any, mode):
         """Create minibatches by flattening adjacency matrices into a single adjacency matrix with
         multiple disconnected components."""
-        if is_training:
+        if mode == ModeKeys.TRAIN:
             np.random.shuffle(data)
+
         # Pack until we cannot fit more graphs in the batch
         dropout_keep_prob = self.params['graph_state_dropout_keep_prob'] if is_training else 1.
         num_graphs = 0
@@ -232,21 +234,35 @@ class BaseEmbeddingsGNN(BaseGNN):
                 batch_num_incoming_edges_per_type.append(num_incoming_edges_per_type)
 
                 target_task_values = []
-                batch_target_task_values.append(cur_graph['labels'])
+
+                if not mode == ModeKeys.INFER:
+                    batch_target_task_values.append(cur_graph['labels'])
+
                 num_graphs += 1
                 num_graphs_in_batch += 1
                 node_offset += num_nodes_in_graph
 
             batch_node_features = batch_node_features.tocoo()
             indices = np.array([[row] for row in batch_node_features.row])
-            batch_feed_dict = {
-                self.placeholders['initial_node_representation']: (indices, batch_node_features.col, (batch_node_features.shape[0], )),
-                self.placeholders['num_incoming_edges_per_type']: np.concatenate(batch_num_incoming_edges_per_type, axis=0),
-                self.placeholders['graph_nodes_list']: np.array(batch_graph_nodes_list, dtype=np.int32),
-                self.placeholders['target_values']: np.array(batch_target_task_values),
-                self.placeholders['num_graphs']: num_graphs_in_batch,
-                self.placeholders['graph_state_keep_prob']: dropout_keep_prob,
-            }
+
+            if mode == ModeKeys.INFER:
+                batch_feed_dict = {
+                    self.placeholders['initial_node_representation']: (indices, batch_node_features.col, (batch_node_features.shape[0], )),
+                    self.placeholders['num_incoming_edges_per_type']: np.concatenate(batch_num_incoming_edges_per_type, axis=0),
+                    self.placeholders['graph_nodes_list']: np.array(batch_graph_nodes_list, dtype=np.int32),
+                    self.placeholders['target_values']: np.array(batch_target_task_values),
+                    self.placeholders['num_graphs']: num_graphs_in_batch,
+                    self.placeholders['graph_state_keep_prob']: dropout_keep_prob,
+                }
+            else:
+                batch_feed_dict = {
+                    self.placeholders['initial_node_representation']: (indices, batch_node_features.col, (batch_node_features.shape[0], )),
+                    self.placeholders['num_incoming_edges_per_type']: np.concatenate(batch_num_incoming_edges_per_type, axis=0),
+                    self.placeholders['graph_nodes_list']: np.array(batch_graph_nodes_list, dtype=np.int32),
+                    self.placeholders['num_graphs']: num_graphs_in_batch,
+                    self.placeholders['graph_state_keep_prob']: dropout_keep_prob,
+                }
+
 
             # Merge adjacency lists and information about incoming nodes:
             for i in range(self.num_edge_types):

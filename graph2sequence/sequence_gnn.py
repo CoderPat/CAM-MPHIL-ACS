@@ -290,7 +290,10 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
             sentences.append(sampled_sentence)
         return sentences
 
-        
+    def process_inference(self, infer_results, infer_graphs):
+        sampled_ids = [sampled_sentence.tolist() for result in infer_results for sampled_sentence in result[0]]
+        return self.get_translations(sampled_ids)
+
 
 def main():
     try:

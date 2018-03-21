@@ -214,7 +214,7 @@ class BaseGNN(object):
                 fetch_list = [self.ops['loss']] + self.extra_valid_ops
             elif mode == ModeKeys.INFER:
                 batch_data[self.placeholders['out_layer_dropout_keep_prob']] = 1.0
-                fetch_list = self.get_extra_infer_ops
+                fetch_list = self.inference_ops
 
             result = self.sess.run(fetch_list, feed_dict=batch_data)
 
@@ -350,8 +350,8 @@ class BaseGNN(object):
         # Assert that we got the same model configuration
         assert len(self.params) == len(data_to_load['params'])
         for (par, par_value) in self.params.items():
-            # Fine to have different task_ids:
-            if par not in ['task_ids']:
+            # Fine to have different task_ids or num epochs:
+            if par not in ['task_ids', 'num_epochs']:
                 assert par_value == data_to_load['params'][par]
 
         variables_to_initialize = []

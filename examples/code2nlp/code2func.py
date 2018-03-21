@@ -12,6 +12,7 @@ Options:
     --freeze-graph-model     Freeze weights of graph model components.
     --training-data FILE     Location of the training data
     --validation-data FILE   Location of the training data
+    --print-example FILE     Print random examples using the a vocabulary file
 """
 
 from typing import List, Tuple, Dict, Sequence, Any
@@ -19,9 +20,11 @@ from typing import List, Tuple, Dict, Sequence, Any
 from docopt import docopt
 from collections import defaultdict
 from scipy.sparse import csr_matrix
+import pickle
 
 import numpy as np
 
+import random
 import os
 import json
 import sys, traceback
@@ -59,13 +62,31 @@ def main():
     data_dir = args.get('--data-dir') or './'
     train_data = args.get('--training-data') or "processed-data/graphs-body-decl-train.json"
     valid_data = args.get('--validation-data') or "processed-data/graphs-body-decl-valid.json"
+    output_vect = args.get('--print-example')
 
     train_data = load_data(data_dir, train_data)
     valid_data = load_data(data_dir, valid_data)
-    
+
+
     try:
         model = Graph2SequenceGNN(args)
         model.train(train_data, valid_data)
+        
+        if output_vect is not None:
+            print("Loading output vectorizer")
+            with open(output_vect, 'rb') as f:
+                output_vect = pickle.load(f)
+            
+            predicted_names = output_vect.devectorize(model.infer(valid_data), indices_only=True)
+            true_names = output_vect.devectorize([g['output'] for g in valid_data], indices_only=True)
+            
+            print("printing random examples, press 'q' \to exit")
+            while True:
+                random_example = random.randint(0, len(predicted_names)-1)
+                print("Predicted function name: %s" % "_".join(predicted_names[random_example]))
+                print("True function name: %s" % "_".join(true_names[random_example]))
+                if (input() == 'q'):
+                    break
     except:
         typ, value, tb = sys.exc_info()
         traceback.print_exc()

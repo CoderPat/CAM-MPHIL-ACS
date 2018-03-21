@@ -104,11 +104,14 @@ class Vectorizer:
             return csr_matrix((values, indices, indptr), (len(term_dics), len(self.__dictionary)+1))
 
     def devectorize(self, vectors, indices_only=False):
-        term_dicts = []
+        all_terms = []
         if indices_only:
-            for index in vectors:
-                term_dicts.append({self.__reversed_dictionary[index] if index > 0 else 'UNK': 1})
-        return term_dicts
+            for vector in vectors:
+                terms = []
+                for index in vector:
+                    terms.append(self.__reversed_dictionary[index] if index > 0 else 'UNK')
+                all_terms.append(terms)
+        return all_terms
             
 
 

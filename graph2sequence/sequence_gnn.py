@@ -25,7 +25,7 @@ import pdb
 from tensorflow.contrib.learn import ModeKeys
 from scipy.sparse import vstack, csr_matrix
 from .base.base_embeddings_gnn import BaseEmbeddingsGNN
-from .base.utils import glorot_init, MLP, compute_bleu
+from .base.utils import glorot_init, MLP, compute_bleu, compute_f1
 
 class Graph2SequenceGNN(BaseEmbeddingsGNN):
     """
@@ -256,7 +256,8 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
         crossent = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.cast(expected_outputs[:, :batch_max_len], tf.int32),
                                                                   logits=computed_logits)
 
-        return tf.reduce_sum(crossent * self.placeholders['target_mask'][:, :batch_max_len]) / tf.cast(self.placeholders['num_graphs'], tf.float32)
+        return (tf.reduce_sum(crossent * self.placeholders['target_mask'][:, :batch_max_len]) / 
+                tf.cast(self.placeholders['num_graphs'], tf.float32))
 
 
     def get_extra_valid_ops(self, computed_logits, _ ):
@@ -268,16 +269,18 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
     def get_log(self, loss, speed, _ , extra_results, mode):
         if mode == ModeKeys.TRAIN:
             return "loss : %.5f | instances/sec: %.2f", (loss, speed)
+
         elif mode == ModeKeys.EVAL:
             #Extra sampled sentences from results
             sampled_ids = [sampled_sentence.tolist() for result in extra_results for sampled_sentence in result[0]]
 
             #Calculate BLEU
-            reference_corpus = [[reference.tolist()] for reference in self.raw_targets]
+            reference_corpus = [reference.tolist() for reference in self.raw_targets]
             sampled_sentences = self.get_translations(sampled_ids)
-            bleu = compute_bleu(reference_corpus, sampled_sentences, max_order=1)[0]
+            bleu = compute_bleu(reference_corpus, sampled_sentences, max_order=1)
+            f1 = compute_f1(reference_corpus, sampled_sentences, unk_token=0)
 
-            return "loss: %.5f BLEU: %.5f | instances/sec: %.2f", (loss, bleu, speed)
+            return "loss: %.5f | BLEU: %.5f | F1: %.5f | instances/sec: %.2f", (loss, bleu, f1, speed)
 
     def get_checkpoint_metric(self, valid_log):
         return valid_log[1]

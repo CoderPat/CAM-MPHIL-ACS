@@ -11,28 +11,32 @@ import math
 
 SMALL_NUMBER = 1e-7
 
-def _get_ngrams(segment, max_order):
-    ngram_counts = collections.Counter()
-    for order in range(1, max_order + 1):
-        for i in range(0, len(segment) - order + 1):
-            ngram = tuple(segment[i:i+order])
-            ngram_counts[ngram] += 1
-    return ngram_counts
+def compute_bleu(references, translations, max_order=4):
+    """
+    Computes BLEU for a evaluation set of translations
+    Based on https://github.com/tensorflow/nmt/blob/master/nmt/scripts/bleu.py
+    """
 
-def compute_bleu(reference_corpus, translation_corpus, max_order=4, unknown_ind=None):
+    def get_ngrams(segment, max_order):
+        ngram_counts = collections.Counter()
+        for order in range(1, max_order + 1):
+            for i in range(0, len(segment) - order + 1):
+                ngram = tuple(segment[i:i+order])
+                ngram_counts[ngram] += 1
+        return ngram_counts
+
     matches_by_order = [0] * max_order
     possible_matches_by_order = [0] * max_order
     reference_length = 0
     translation_length = 0
-    for (references, translation) in zip(reference_corpus, translation_corpus):
-        reference_length += min(len(r) for r in references)
+    for (reference, translation) in zip(references, translations):
+        reference_length += len(reference)
         translation_length += len(translation)
 
-        merged_ref_ngram_counts = collections.Counter()
-        for reference in references:
-            merged_ref_ngram_counts |= _get_ngrams(reference, max_order)
-        translation_ngram_counts = _get_ngrams(translation, max_order)
-        overlap = translation_ngram_counts & merged_ref_ngram_counts
+        reference_ngram_counts = get_ngrams(reference, max_order)
+        translation_ngram_counts = get_ngrams(translation, max_order)
+        overlap = translation_ngram_counts & reference_ngram_counts
+
         for ngram in overlap:
             matches_by_order[len(ngram)-1] += overlap[ngram]
         for order in range(1, max_order+1):
@@ -43,8 +47,7 @@ def compute_bleu(reference_corpus, translation_corpus, max_order=4, unknown_ind=
     precisions = [0] * max_order
     for i in range(0, max_order):
         if possible_matches_by_order[i] > 0:
-            precisions[i] = (float(matches_by_order[i]) /
-                             possible_matches_by_order[i])
+            precisions[i] = matches_by_order[i] / possible_matches_by_order[i]
         else:
             precisions[i] = 0.0
 
@@ -54,7 +57,7 @@ def compute_bleu(reference_corpus, translation_corpus, max_order=4, unknown_ind=
     else:
         geo_mean = 0
 
-    ratio = float(translation_length) / reference_length
+    ratio = translation_length / reference_length
 
     if ratio > 1.0:
         bp = 1.
@@ -65,7 +68,44 @@ def compute_bleu(reference_corpus, translation_corpus, max_order=4, unknown_ind=
 
     bleu = geo_mean * bp
 
-    return (bleu, precisions, bp, ratio, translation_length, reference_length)
+    return bleu
+
+
+def compute_f1(references, translations, beta=1, unk_token=None):
+    """
+    Computes BLEU for a evaluation set of translations
+    Based on https://github.com/mast-group/convolutional-attention/blob/master/convolutional_attention/f1_evaluator.pyy
+    """
+
+    total_f1 = 0
+    for (reference, translation) in zip(references, translations):
+        tp = 0
+        ref = list(reference)
+        for token in set(translation):
+            if token == unk_token:
+                continue  
+            if token in ref:
+                ref.remove(token)
+                tp += 1
+
+        if len(translation) > 0:
+            precision = tp / len(translation)
+        else:
+            precision = 0
+
+        if len(reference) > 0:
+            recall = tp / len(reference)
+        else:
+            recall = 0
+
+        if precision + recall > 0:
+            f1 = (1+beta**2) * precision * recall / ((beta**2 * precision) + recall)
+        else:
+            f1 = 0
+
+        total_f1 += f1
+    return total_f1 / len(translations)
+
 
 def glorot_init(shape):
     initialization_range = np.sqrt(6.0 / (shape[-2] + shape[-1]))

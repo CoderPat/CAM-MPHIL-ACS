@@ -46,7 +46,6 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
             'clamp_gradient_norm': 1.0,
             'out_layer_dropout_keep_prob': 1.0,
 
-            'h_dim' : 128,
             'num_timesteps': 4,
 
             'tie_fwd_bkwd': True,
@@ -246,7 +245,7 @@ class Graph2SequenceGNN(BaseEmbeddingsGNN):
                                                             output_layer=self.projection_layer)
 
             self.ops['infer_output'], _, _= tf.contrib.seq2seq.dynamic_decode(infer_decoder,
-                                                                              maximum_iterations=self.params['max_output_len'])
+                                                                              maximum_iterations=2*self.max_output_len)
 
 
         return train_outputs.rnn_output

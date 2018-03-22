@@ -32,6 +32,8 @@ import pdb
 
 from graph2sequence.sequence_gnn import Graph2SequenceGNN
 
+MAX_VERTICES_IN_GRAPH = 10000
+
 def load_data(data_dir, file_name, restrict = None):
     full_path = os.path.join(data_dir, file_name)
 
@@ -44,6 +46,10 @@ def load_data(data_dir, file_name, restrict = None):
         g = {}
         g["graph"] = d["graph"]
         (data, indices, indptr, shape) = d["node_features"]
+
+        if shape[0] >= MAX_VERTICES_IN_GRAPH:
+            continue 
+
         g["node_features"] = csr_matrix((data, indices, indptr), shape)
         g["output"] = np.array(d["output_features"])
         new_data.append(g)

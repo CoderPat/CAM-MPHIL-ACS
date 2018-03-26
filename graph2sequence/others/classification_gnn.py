@@ -52,7 +52,7 @@ class ClassificationGNN(BaseEmbeddingsGNN):
         return tf.sparse_tensor_dense_matmul(graph_nodes, gated_outputs) # [g c]
 
 
-    def get_output(self, last_h):
+    def build_output(self, last_h):
         with tf.variable_scope("regression_gate"):
             self.weights['regression_gate'] = MLP(self.params['hidden_size'], self.output_shape[0], [],
                                                   self.placeholders['out_layer_dropout_keep_prob'])
@@ -70,19 +70,22 @@ class ClassificationGNN(BaseEmbeddingsGNN):
                                                                         logits=computed_logits))
         return tf.reduce_mean(cross_entropies)
 
-    def get_extra_train_ops(self, computed_logits, target_classes):
+    def get_training_ops(self, computed_logits, target_classes):
         if self.accuracy is None:
             correct_prediction = tf.equal(tf.argmax(computed_logits,1), tf.argmax(target_classes,1))
-            self.accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+            self.accuracy = tf.cast(correct_prediction, tf.float32)
         return [self.accuracy]
 
-    def get_extra_valid_ops(self, computed_logits, target_classes):
+    def get_validation_ops(self, computed_logits, target_classes):
         if self.accuracy is None:
             correct_prediction = tf.equal(tf.argmax(computed_logits,1), tf.argmax(target_classes,1))
             self.accuracy = [tf.reduce_mean(tf.cast(correct_prediction, tf.float32))]
         return [self.accuracy]
 
-    def get_log(self, loss, speed, num_graphs, extra_results, _):
+    def get_inference_ops(self, computed_logits):
+        return tf.argmax(computed_logits,1)
+
+    def get_log(self, loss, speed, extra_results, _):
         accuracies = np.array([result[0] for result in results]) * np.array(num_graphs)
         accuracy = np.sum(accuracies)/np.sum(np.array(num_graphs))
         return "Train: loss: %.5f | acc: %.5f | instances/sec: %.2f", (loss, accuracy, speed)

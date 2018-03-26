@@ -30,7 +30,7 @@ import json
 import sys, traceback
 import pdb
 
-from graph2sequence.sequence_gnn import Graph2SequenceGNN
+from graph2sequence.sequence_gnn import SequenceGNN
 
 MAX_VERTICES_IN_GRAPH = 10000
 
@@ -69,7 +69,7 @@ def main():
 
 
     try:
-        model = Graph2SequenceGNN(args)
+        model = SequenceGNN(args)
         model.train(train_data, valid_data)
         
         if output_vect is not None:

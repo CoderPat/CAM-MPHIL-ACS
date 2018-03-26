@@ -133,10 +133,10 @@ class BaseGNN(object):
             if not self.params['use_graph']:
                 self.ops['final_node_representations'] = tf.zeros_like(self.ops['final_node_representations'])
 
-        computed_outputs = self.get_output(self.ops['final_node_representations'])
+        computed_outputs = self.build_output(self.ops['final_node_representations'])
         self.ops['loss'] = self.get_loss(computed_outputs, self.placeholders['target_values'])
-        self.extra_train_ops = self.get_extra_train_ops(computed_outputs, self.placeholders['target_values'])
-        self.extra_valid_ops = self.get_extra_valid_ops(computed_outputs, self.placeholders['target_values'])
+        self.training_ops = self.get_training_ops(computed_outputs, self.placeholders['target_values'])
+        self.validation_ops = self.get_validation_ops(computed_outputs, self.placeholders['target_values'])
         self.inference_ops = self.get_inference_ops(computed_outputs)
 
 
@@ -163,55 +163,21 @@ class BaseGNN(object):
         # Initialize newly-introduced variables:
         self.sess.run(tf.local_variables_initializer())
 
-    def get_output(self, last_h) -> tf.Tensor:
-        raise Exception("Models have to implement layers after hidden node representation!")
-
-    def get_extra_train_ops(self, computed_outputs, target_outputs):
-        return []
-    
-    def get_extra_eval_ops(self, computed_outputs, target_outputs):
-        return []
-
-    def get_inference_ops(self, computed_outputs):
-        raise Exception("Models have to specify inference ops")
-
-    def get_loss(self, computed_outputs, target_outputs) -> tf.Tensor:
-        raise Exception("")
-
-    def prepare_specific_graph_model(self) -> None:
-        raise Exception("Models have to implement prepare_specific_graph_model!")
-
-    def compute_final_node_representations(self) -> tf.Tensor:
-        raise Exception("Models have to implement compute_final_node_representations!")
-
-    def make_minibatch_iterator(self, data: Any, mode: bool):
-        raise Exception("Models have to implement make_minibatch_iterator!")
-
-    def get_log(self, loss, speed, num_graphs, extra_results, mode):
-        return "loss : %.5f | instances/sec: %.2f", (loss, speed)
-
-    def get_checkpoint_metric(self, valid_log):
-        return -valid_log[0]
-
-    def process_inference(self, inference_results, inference_graphs):
-        raise Exception("Models have to implement process_inference")
-
     def run_epoch(self, epoch_name: str, data, mode):
         loss = 0
         start_time = time.time()
         processed_graphs = 0
         batch_results = []
-        batch_graphs = []
         batch_iterator = ThreadedIterator(self.make_minibatch_iterator(data, mode), max_queue_size=5)
         for step, batch_data in enumerate(batch_iterator):
             num_graphs = batch_data[self.placeholders['num_graphs']]
             processed_graphs += num_graphs
             if mode == ModeKeys.TRAIN:
                 batch_data[self.placeholders['out_layer_dropout_keep_prob']] = self.params['out_layer_dropout_keep_prob']
-                fetch_list = [self.ops['loss'], self.ops['train_step']] + self.extra_train_ops
+                fetch_list = [self.ops['loss'], self.ops['train_step']] + self.training_ops
             elif mode == ModeKeys.EVAL:
                 batch_data[self.placeholders['out_layer_dropout_keep_prob']] = 1.0
-                fetch_list = [self.ops['loss']] + self.extra_valid_ops
+                fetch_list = [self.ops['loss']] + self.validation_ops
             elif mode == ModeKeys.INFER:
                 batch_data[self.placeholders['out_layer_dropout_keep_prob']] = 1.0
                 fetch_list = self.inference_ops
@@ -227,23 +193,22 @@ class BaseGNN(object):
                                                                                    loss / processed_graphs),
                                                                                    end='\r')
 
-            # Submodels handle the extra results so we just pass them along
+            # Submodels handle the results so we just pass them along
             if mode == ModeKeys.TRAIN:
-                extra_results = result[2:]
+                results = result[2:]
             elif mode == ModeKeys.EVAL:
-                extra_results = result[1:]
+                results = result[1:]
             elif mode == ModeKeys.INFER:
-                extra_results = result
+                results = result
 
-            batch_results.append(extra_results)
-            batch_graphs.append(num_graphs)
+            batch_results.append(results)
 
         instance_per_sec = processed_graphs / (time.time() - start_time)
         if mode == ModeKeys.INFER:
-            return batch_results, batch_graphs
+            return batch_results
         else: 
             loss = loss / processed_graphs
-            return loss, batch_results, batch_graphs, instance_per_sec
+            return loss, batch_results, instance_per_sec
 
     def train(self, train_data, valid_data):
         # Load data:
@@ -281,7 +246,6 @@ class BaseGNN(object):
                                                         ModeKeys.TRAIN)
 
                 print(("\r\x1b[K Train: " + format_string) % train_log)
-                #print("\r\x1b[K Train: loss: %.5f | " + metric_format + " | instances/sec: %.2f" % train_results)
                 valid_loss, valid_results, valid_graphs, valid_speed = self.run_epoch("epoch %i (validation)" % epoch,
                                                                                       self.valid_data, ModeKeys.EVAL)
 
@@ -317,11 +281,10 @@ class BaseGNN(object):
         input_data = self.process_data(input_data, mode=ModeKeys.INFER)
 
         with self.graph.as_default():
-            infer_results, infer_graphs = self.run_epoch(None, input_data, ModeKeys.INFER)
+            infer_results = self.run_epoch(None, input_data, ModeKeys.INFER)
 
-        return self.process_inference(infer_results, infer_graphs)
+        return self.process_inference(infer_results)
     
-
 
     def save_model(self, path: str) -> None:
         weights_to_save = {}
@@ -370,3 +333,40 @@ class BaseGNN(object):
                     print('Saved weights for %s not used by model.' % var_name)
             restore_ops.append(tf.variables_initializer(variables_to_initialize))
             self.sess.run(restore_ops)
+
+
+    # Template methods that subclasses normally subclasses should redefine
+    # -----------------------------------------------------------------------
+
+    def prepare_specific_graph_model(self) -> None:
+        raise Exception("Models have to implement prepare_specific_graph_model!")
+
+    def compute_final_node_representations(self) -> tf.Tensor:
+        raise Exception("Models have to implement compute_final_node_representations!")
+
+    def make_minibatch_iterator(self, data: Any, mode: bool):
+        raise Exception("Models have to implement make_minibatch_iterator!")
+
+    def build_output(self, last_h) -> tf.Tensor:
+        raise Exception("Models have to implement layers after hidden node representation!")
+
+    def get_loss(self, computed_outputs, target_outputs) -> tf.Tensor:
+        raise Exception("")
+
+    def get_training_ops(self, computed_outputs, target_outputs):
+        return []
+    
+    def get_evaluation_ops(self, computed_outputs, target_outputs):
+        return []
+
+    def get_inference_ops(self, computed_outputs):
+        raise Exception("Models have to specify inference ops")
+
+    def get_log(self, loss, speed, results, mode):
+        return "loss : %.5f | instances/sec: %.2f", (loss, speed)
+
+    def get_checkpoint_metric(self, valid_log):
+        return -valid_log[0]
+
+    def process_inference(self, inference_results):
+        raise Exception("Models have to implement process_inference")

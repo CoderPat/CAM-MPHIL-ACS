@@ -95,10 +95,17 @@ class BaseEmbeddingsGNN(BaseGNN):
                 self.weights['rnn_cells'].append(cell)
 
     def compute_final_node_representations(self) -> tf.Tensor:
-        cur_node_states = self.placeholders['initial_node_representation']  # number of nodes in batch v x V
+        h_dim = self.params['hidden_size']
         num_nodes = tf.shape(self.placeholders['initial_node_representation'], out_type=tf.int64)[0]
 
+        cur_node_states = self.placeholders['initial_node_representation']  # number of nodes in batch v x V
+
         cur_node_states = tf.nn.embedding_lookup_sparse(self.weights['input_embeddings'], cur_node_states, None, combiner='mean')
+        
+        pad_len = ( tf.shape(self.placeholders['initial_node_representation'])[0] 
+                  - tf.shape(cur_node_states)[0])
+        cur_node_states = tf.concat([cur_node_states, tf.zeros((pad_len, h_dim))], axis=0)  
+
 
         for (layer_idx, num_timesteps) in enumerate(self.params['layer_timesteps']):
             with tf.variable_scope('gnn_layer_%i' % layer_idx):

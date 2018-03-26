@@ -32,7 +32,7 @@ import pdb
 
 from graph2sequence.sequence_gnn import SequenceGNN
 
-MAX_VERTICES_IN_GRAPH = 10000
+MAX_VERTICES_IN_GRAPH = 1000
 
 def load_data(data_dir, file_name, restrict = None):
     full_path = os.path.join(data_dir, file_name)
@@ -54,6 +54,7 @@ def load_data(data_dir, file_name, restrict = None):
         g["output"] = np.array(d["output_features"])
         new_data.append(g)
 
+    print("Using %d out of %d" % (len(new_data), len(data)))
     return new_data
 
 

@@ -51,7 +51,7 @@ class SequenceGNN(BaseEmbeddingsGNN):
             'num_timesteps': 4,
 
             'tie_fwd_bkwd': True,
-            'attention': None
+            'attention': 'Luong'
         })
         return params
 
@@ -140,10 +140,8 @@ class SequenceGNN(BaseEmbeddingsGNN):
                 cur_graph = data[num_graphs]
                 num_nodes_in_graph = cur_graph['init'].shape[0]
                 batch_node_features = vstack([batch_node_features, cur_graph['init']])
-
-                if self.params['attention'] is None:
-                    batch_graph_nodes_list.extend((num_graphs_in_batch, i) for i in range(num_nodes_in_graph))
-                    batch_node_offsets.extend([node_offset]*num_nodes_in_graph)
+                batch_graph_nodes_list.extend((num_graphs_in_batch, i) for i in range(num_nodes_in_graph))
+                batch_node_offsets.extend([node_offset]*num_nodes_in_graph)
 
                 for i in range(self.num_edge_types):
                     if i in cur_graph['adjacency_lists']:
@@ -184,7 +182,6 @@ class SequenceGNN(BaseEmbeddingsGNN):
                     self.placeholders['decoder_inputs']: np.array(batch_decoder_inputs),
                     self.placeholders['sequence_lens']: np.array(batch_sequence_lens),
                     self.placeholders['target_mask'] : np.array(batch_target_mask),
-                    self.placeholders['num_graphs']: num_graphs_in_batch,
                     self.placeholders['graph_state_keep_prob']: dropout_keep_prob,
                 })
 
@@ -203,6 +200,8 @@ class SequenceGNN(BaseEmbeddingsGNN):
     def build_decoder_cell(self, last_h):
         h_dim = self.params['hidden_size']
         num_nodes = tf.shape(last_h, out_type=tf.int64)[0]
+        num_graphs = tf.cast(self.placeholders['num_graphs'], tf.int64)
+
         padded_nodes = (self.placeholders['graph_nodes_list'][:, 1] + 
                         tf.cast(self.placeholders['node_offsets'], tf.int64))
 
@@ -213,7 +212,7 @@ class SequenceGNN(BaseEmbeddingsGNN):
 
         graph_mask = tf.SparseTensor(indices=padded_node_list,
                                       values=tf.ones_like(self.placeholders['graph_nodes_list'][:, 0], dtype=tf.float32),
-                                      dense_shape=[tf.cast(self.placeholders['num_graphs'], tf.int64) , num_nodes])
+                                      dense_shape=[num_graphs, num_nodes])
 
         graph_averages = (tf.sparse_tensor_dense_matmul(tf.cast(graph_mask, tf.float32), last_h)
                          / tf.reshape(tf.sparse_reduce_sum(graph_mask, 1), (-1, 1)))
@@ -222,8 +221,8 @@ class SequenceGNN(BaseEmbeddingsGNN):
         # and node embeddings for each graph
         padded_embeddings = tf.concat([tf.zeros([1, h_dim]), last_h], axis=0) 
         graph_nodes = tf.sparse_to_dense(self.placeholders['graph_nodes_list'],
-                                        [tf.cast(self.placeholders['num_graphs'], tf.int64), self.max_num_vertices],
-                                         padded_nodes)
+                                        [num_graphs, self.max_num_vertices],
+                                        padded_nodes)
         graph_embeddings = tf.nn.embedding_lookup(padded_embeddings, graph_nodes)
         
         #Build decoder cell
@@ -240,11 +239,12 @@ class SequenceGNN(BaseEmbeddingsGNN):
             decoder_cell = tf.nn.rnn_cell.BasicRNNCell(h_dim, activation=activation_fun)
 
         if self.params['attention'] == 'Luong':
-            attention_mech = tf.contrib.seq2seq.LuongAttention(h_dim, graph_embeddings,
-                                                               memory_sequence_lenght=None)
+            attention_mechanism = tf.contrib.seq2seq.LuongAttention(h_dim, graph_embeddings,
+                                                                    memory_sequence_length=None)
             decoder_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, attention_mechanism,
                                                                attention_layer_size=h_dim)
-            initial_state = decoder_cell.zero_state(hparams.batch_size, tf.float32).clone(cell_state=graph_averages) 
+            initial_state = decoder_cell.zero_state(self.placeholders['num_graphs'], tf.float32) \
+                                        .clone(cell_state=graph_averages) 
             return decoder_cell, initial_state
         else:
             return decoder_cell, graph_averages
@@ -304,7 +304,7 @@ class SequenceGNN(BaseEmbeddingsGNN):
     def get_inference_ops(self, computed_logits):
         return [self.ops['infer_output'].sample_id]
 
-    def get_log(self, loss, speed, _ , extra_results, mode):
+    def get_log(self, loss, speed, extra_results, mode):
         if mode == ModeKeys.TRAIN:
             return "loss : %.5f | instances/sec: %.2f", (loss, speed)
 

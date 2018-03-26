@@ -228,7 +228,7 @@ class BaseGNN(object):
                 valid_loss, valid_results, valid_graphs, valid_speed = self.run_epoch("Resumed (validation)", 
                                                                                       self.valid_data, ModeKeys.EVAL)
 
-                format_string, valid_log = self.get_log(valid_loss, valid_speed, valid_graphs, valid_results,
+                format_string, valid_log = self.get_log(valid_loss, valid_speed, valid_results,
                                                         ModeKeys.EVAL)
 
                 best_checkpoint_metric = self.get_checkpoint_metric(valid_log)
@@ -239,18 +239,18 @@ class BaseGNN(object):
 
             for epoch in range(1, self.params['num_epochs'] + 1):
                 print("== Epoch %i" % epoch)
-                train_loss, train_results, train_graphs, train_speed = self.run_epoch("epoch %i (training)" % epoch,
+                train_loss, train_results, train_speed = self.run_epoch("epoch %i (training)" % epoch,
                                                                                       self.train_data, ModeKeys.TRAIN)
 
-                format_string, train_log = self.get_log(train_loss, train_speed, train_graphs, train_results,
+                format_string, train_log = self.get_log(train_loss, train_speed, train_results,
                                                         ModeKeys.TRAIN)
 
                 print(("\r\x1b[K Train: " + format_string) % train_log)
-                valid_loss, valid_results, valid_graphs, valid_speed = self.run_epoch("epoch %i (validation)" % epoch,
+                valid_loss, valid_results, valid_speed = self.run_epoch("epoch %i (validation)" % epoch,
                                                                                       self.valid_data, ModeKeys.EVAL)
 
 
-                format_string, valid_log = self.get_log(valid_loss, valid_speed, valid_graphs, valid_results,
+                format_string, valid_log = self.get_log(valid_loss, valid_speed, valid_results,
                                                         ModeKeys.EVAL)
 
                 print(("\r\x1b[K Valid: " + format_string) % valid_log)

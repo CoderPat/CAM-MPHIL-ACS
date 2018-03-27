@@ -47,6 +47,7 @@ class SequenceGNN(BaseEmbeddingsGNN):
             'decoder_layers' : 1,
             'clamp_gradient_norm': 1.0,
             'out_layer_dropout_keep_prob': 1.0,
+            'graph_state_dropout_keep_prob': 1.0,
 
             'num_timesteps': 4,
 
@@ -56,10 +57,10 @@ class SequenceGNN(BaseEmbeddingsGNN):
         return params
 
     def prepare_specific_graph_model(self) -> None:
+        self.placeholders['graph_sizes'] = tf.placeholder(tf.int32, [None], name='graph_sizes')
         self.placeholders['decoder_inputs'] = tf.placeholder(tf.int32, [None, self.max_output_len+1], name='decoder_inputs')
         self.placeholders['sequence_lens'] = tf.placeholder(tf.int32, [None], name='sequence_lens')
         self.placeholders['target_mask'] = tf.placeholder(tf.float32, [None, self.max_output_len], name='target_mask')
-        self.placeholders['node_offsets'] = tf.placeholder(tf.int32, [None], name='node_offsets')
         super().prepare_specific_graph_model()
 
 
@@ -72,7 +73,7 @@ class SequenceGNN(BaseEmbeddingsGNN):
         if mode == ModeKeys.TRAIN and (self.params['input_shape'] is None or self.params['target_vocab_size'] is None):
             num_fwd_edge_types = 0
             for g in data:
-                self.max_num_vertices = max(self.max_num_vertices, max([v for e in g['graph'] for v in [e[0], e[2]]]))
+                self.max_num_vertices = max(self.max_num_vertices, max([v for e in g['graph'] for v in [e[0], e[2]]])+1)
                 self.max_output_len = max(self.max_output_len, g['output'].shape[0] + 1)
                 self.target_vocab_size = max(self.target_vocab_size, np.max(g['output'])+1 if len(g['output'])>0 else 0) 
                 num_fwd_edge_types = max(num_fwd_edge_types, max([e[1] for e in g['graph']]))
@@ -126,8 +127,8 @@ class SequenceGNN(BaseEmbeddingsGNN):
         while num_graphs < len(data):
             num_graphs_in_batch = 0
             batch_node_features = csr_matrix(np.empty(shape=(0,data[0]['init'].shape[1])))
+            batch_graph_sizes = []
             batch_target_task_values = []
-            batch_node_offsets = []
             batch_decoder_inputs = []
             batch_sequence_lens = []
             batch_target_mask = []
@@ -150,6 +151,7 @@ class SequenceGNN(BaseEmbeddingsGNN):
                     pad_len = self.max_num_vertices - num_nodes_in_graph
                     pad_nodes = csr_matrix((pad_len, cur_graph['init'].shape[1]), dtype=np.int32)
                     batch_node_features = vstack([batch_node_features, pad_nodes])
+                    batch_graph_sizes.append(num_nodes_in_graph)
                     num_nodes_in_graph = self.max_num_vertices 
 
                 for i in range(self.num_edge_types):
@@ -181,10 +183,12 @@ class SequenceGNN(BaseEmbeddingsGNN):
                 self.placeholders['num_incoming_edges_per_type']: np.concatenate(batch_num_incoming_edges_per_type, axis=0),
                 self.placeholders['num_graphs']: num_graphs_in_batch,
                 self.placeholders['graph_state_keep_prob']: dropout_keep_prob,
-                self.placeholders['node_offsets'] : np.array(batch_node_offsets)
+                self.placeholders['graph_sizes'] : np.array(batch_graph_sizes)
             }
             if self.params['attention'] is None:
-                 batch_feed_dict[self.placeholders['graph_nodes_list']] = np.array(batch_graph_nodes_list, dtype=np.int32)
+                batch_feed_dict[self.placeholders['graph_nodes_list']] = np.array(batch_graph_nodes_list, dtype=np.int32)
+            else:
+                batch_feed_dict[self.placeholders['graph_sizes']] = np.array(batch_graph_sizes)
             
             if mode != ModeKeys.INFER:
                 batch_feed_dict.update({
@@ -240,11 +244,14 @@ class SequenceGNN(BaseEmbeddingsGNN):
                                                          self.max_num_vertices,
                                                          h_dim))
 
+            graph_averages = (tf.reduce_sum(graph_embeddings, axis=1) / 
+                              tf.reshape(tf.cast(self.placeholders["graph_sizes"], tf.float32), (-1, 1)))
+
             attention_mechanism = tf.contrib.seq2seq.LuongAttention(h_dim, graph_embeddings,
                                                                     memory_sequence_length=None)
             decoder_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, attention_mechanism,
                                                                attention_layer_size=h_dim)
-            initial_state = decoder_cell.zero_state(self.placeholders['num_graphs'], tf.float32)
+            initial_state = decoder_cell.zero_state(self.placeholders['num_graphs'], tf.float32).clone(cell_state=graph_averages)
 
             return decoder_cell, initial_state
         else:

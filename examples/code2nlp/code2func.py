@@ -34,15 +34,26 @@ from graph2sequence.sequence_gnn import SequenceGNN
 
 MAX_VERTICES_IN_GRAPH = 1000
 
+config = {
+    'num_epochs': 100,
+    'learning_rate': 0.0005,
+    'clamp_gradient_norm': 1.0,
+    'graph_state_dropout_keep_prob': 0.7,
+
+    'hidden_size': 256,
+    'num_timesteps': 4,
+    'attention':'Luong'
+}
+
 def load_data(data_dir, file_name, restrict = None):
     full_path = os.path.join(data_dir, file_name)
 
     print("Loading data from %s" % full_path)
     with open(full_path, 'r') as f:
-        data = json.load(f)
+        raw_data = json.load(f)
 
     new_data = []
-    for d in data:
+    for d in raw_data:
         g = {}
         g["graph"] = d["graph"]
         (data, indices, indptr, shape) = d["node_features"]
@@ -54,7 +65,7 @@ def load_data(data_dir, file_name, restrict = None):
         g["output"] = np.array(d["output_features"])
         new_data.append(g)
 
-    print("Using %d out of %d" % (len(new_data), len(data)))
+    print("Using %d out of %d" % (len(new_data), len(raw_data)))
     return new_data
 
 
@@ -68,6 +79,7 @@ def main():
     train_data = load_data(data_dir, train_data)
     valid_data = load_data(data_dir, valid_data)
 
+    args['--config'] =  json.dumps(config)
 
     try:
         model = SequenceGNN(args)

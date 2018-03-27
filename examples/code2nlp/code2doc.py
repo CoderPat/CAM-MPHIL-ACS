@@ -4,8 +4,6 @@ Usage:
 
 Options:
     -h --help                Show this screen.
-    --config-file FILE       Hyperparameter configuration file path (in JSON format).
-    --config CONFIG          Hyperparameter configuration dictionary (in JSON format).
     --log_dir DIR            Log dir name.
     --data_dir DIR           Data dir name.
     --restore FILE           File to restore weights from.
@@ -29,8 +27,19 @@ import pdb
 
 from graph2sequence.sequence_gnn import SequenceGNN
 
-MAX_VERTICES_GRAPH=10000
-MAX_OUTPUT_LEN= 50
+MAX_VERTICES_GRAPH = 1000
+MAX_OUTPUT_LEN = 50
+
+config = {
+    'num_epochs' : 100,
+    'learning_rate': 0.0005,
+    'clamp_gradient_norm': 1.0,
+    'graph_state_dropout_keep_prob': 0.7,
+
+    'hidden_size': 256,
+    'num_timesteps': 4,
+    'attention':'Luong'
+}
 
 def load_data(data_dir, file_name, restrict = None):
     full_path = os.path.join(data_dir, file_name)
@@ -63,6 +72,7 @@ def main():
 
     train_data = load_data(data_dir, train_data)
     valid_data = load_data(data_dir, valid_data)
+    args['--config'] = json.dumps(config)
     
     try:
         model = SequenceGNN(args)

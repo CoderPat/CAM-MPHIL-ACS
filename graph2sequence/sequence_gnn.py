@@ -19,7 +19,8 @@ from docopt import docopt
 from collections import defaultdict
 import numpy as np
 import tensorflow as tf
-import sys, traceback
+import sys
+import traceback
 import pdb
 
 from tensorflow.contrib.learn import ModeKeys
@@ -248,7 +249,7 @@ class SequenceGNN(BaseEmbeddingsGNN):
                               tf.reshape(tf.cast(self.placeholders["graph_sizes"], tf.float32), (-1, 1)))
 
             attention_mechanism = tf.contrib.seq2seq.LuongAttention(h_dim, graph_embeddings,
-                                                                    memory_sequence_length=None)
+                                                                    memory_sequence_length=self.placeholders["graph_sizes"])
             decoder_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, attention_mechanism,
                                                                attention_layer_size=h_dim)
             initial_state = decoder_cell.zero_state(self.placeholders['num_graphs'], tf.float32).clone(cell_state=graph_averages)

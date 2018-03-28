@@ -7,6 +7,7 @@ Options:
     --log_dir DIR            Log dir name.
     --data_dir DIR           Data dir name.
     --restore FILE           File to restore weights from.
+    --no-train               Sets epochs to zero (only for already trained models)
     --freeze-graph-model     Freeze weights of graph model components.
     --training-data FILE     Location of the training data
     --validation-data FILE   Location of the training data
@@ -30,7 +31,7 @@ from graph2sequence.sequence_gnn import SequenceGNN
 MAX_VERTICES_GRAPH = 1000
 MAX_OUTPUT_LEN = 50
 
-config = {
+CONFIG = {
     'num_epochs' : 100,
     'learning_rate': 0.0005,
     'clamp_gradient_norm': 1.0,
@@ -72,7 +73,11 @@ def main():
 
     train_data = load_data(data_dir, train_data)
     valid_data = load_data(data_dir, valid_data)
-    args['--config'] = json.dumps(config)
+
+    if args.get('--no-train') is not None:
+        CONFIG['num_epochs'] = 0
+        
+    args['--config'] = json.dumps(CONFIG)
     
     try:
         model = SequenceGNN(args)

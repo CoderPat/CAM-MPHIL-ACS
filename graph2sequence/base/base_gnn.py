@@ -225,8 +225,8 @@ class BaseGNN(object):
         total_time_start = time.time()
         with self.graph.as_default():
             if self.args.get('--restore') is not None:
-                valid_loss, valid_results, valid_graphs, valid_speed = self.run_epoch("Resumed (validation)", 
-                                                                                      self.valid_data, ModeKeys.EVAL)
+                valid_loss, valid_results, valid_speed = self.run_epoch("Resumed (validation)", 
+                                                                         self.valid_data, ModeKeys.EVAL)
 
                 format_string, valid_log = self.get_log(valid_loss, valid_speed, valid_results,
                                                         ModeKeys.EVAL)
@@ -335,7 +335,7 @@ class BaseGNN(object):
             self.sess.run(restore_ops)
 
 
-    # Template methods that subclasses normally subclasses should redefine
+    # Template methods that normally subclasses should redefine
     # -----------------------------------------------------------------------
 
     def prepare_specific_graph_model(self) -> None:

@@ -13,6 +13,7 @@ Options:
     --save-input-vect FILE   File to save the created vectorizer for encoding token labels.
     --load-output-vect FILE  File to load a previously created vectorizer for encoding code descriptions.
     --save-output-vect FILE  File to save the created vectorizer for encoding code descriptions.
+    --print-example          Prints random graph examples
 """
 from ast import *
 import re
@@ -26,13 +27,13 @@ import pickle
 from scipy.sparse import csr_matrix
 
 import networkx as nx
-from networkx.drawing.nx_agraph import write_dot
+from networkx.drawing.nx_agraph import write_dot, to_agraph
 
 import numpy as np
 import matplotlib.pyplot as plt
 
 from graph2sequence.base.utils import Vectorizer
-from ast_graph_generator import AstGraphGenerator
+from ast_graph_generator import *
 from sklearn.feature_extraction.text import CountVectorizer
 
 
@@ -61,16 +62,19 @@ def plot_code_graph(snippet):
     graph = nx.parse_edgelist(["%d %d {'type': %d}" 
                 % (origin, destination, t) for (origin, destination), edges in visitor.graph.items() for t in edges], 
                                 nodetype = int,
-                                create_using = nx.DiGraph())
+                                create_using = nx.MultiDiGraph())
     pos=nx.nx_agraph.graphviz_layout(graph, prog='dot')
 
-    
-    edges = graph.edges()
-    colors = ['green' if graph[source][destination]['type'] else 'blue' for source, destination in edges]
-    nx.draw(graph, pos, with_labels=False, arrows=True, edges=edges, edge_color=colors)
-    nx.draw_networkx_labels(graph, pos, labels=visitor.node_label)
-    plt.draw()
-    plt.show()
+    graph.graph['edge'] = {'arrowsize': '0.6', 'splines': 'curved'}
+    graph.graph['graph'] = {'scale': '3'}
+    A = to_agraph(graph) 
+
+    for i, (nid, label) in enumerate(visitor.node_label.items()):
+        A.get_node(i).attr['label'] = "%s (%d)" % (label, nid)
+
+    A.layout('dot')                                                                 
+    A.draw('multi.png')   
+
 
 def process_data(inputs, outputs, task_type, input_vectorizer, output_vectorizer):
     data, graph_node_labels, docs_words = ([], [], [])

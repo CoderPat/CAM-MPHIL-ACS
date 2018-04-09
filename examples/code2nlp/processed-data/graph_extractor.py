@@ -26,8 +26,7 @@ import pickle
 
 from scipy.sparse import csr_matrix
 
-import networkx as nx
-from networkx.drawing.nx_agraph import write_dot, to_agraph
+from pygraphviz import *
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -56,21 +55,29 @@ def decl_tokenizer(decl):
     return splitter(function_name, ordered=True)
 
 def plot_code_graph(snippet):
+
     print(snippet)
+
+    color_dict = {
+        0 : 'blue',
+        1 : 'yellow',
+        2 : 'black',
+        3 : 'red',
+        4 : 'green',
+        5 : 'brown',
+    }
     visitor = AstGraphGenerator() 
     visitor.visit(parse(snippet))
-    graph = nx.parse_edgelist(["%d %d {'type': %d}" 
-                % (origin, destination, t) for (origin, destination), edges in visitor.graph.items() for t in edges], 
-                                nodetype = int,
-                                create_using = nx.MultiDiGraph())
-    pos=nx.nx_agraph.graphviz_layout(graph, prog='dot')
 
-    graph.graph['edge'] = {'arrowsize': '0.6', 'splines': 'curved'}
-    graph.graph['graph'] = {'scale': '3'}
-    A = to_agraph(graph) 
+    A = AGraph(strict=False, directed=True)
 
+    for (u, v), edges in visitor.graph.items():
+        for edge in edges:
+            A.add_edge(u, v, color=color_dict[edge])
+    
     for i, (nid, label) in enumerate(visitor.node_label.items()):
         A.get_node(i).attr['label'] = "%s (%d)" % (label, nid)
+    
 
     A.layout('dot')                                                                 
     A.draw('multi.png')   

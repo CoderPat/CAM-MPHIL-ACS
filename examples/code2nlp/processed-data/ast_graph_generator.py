@@ -11,14 +11,13 @@
 """
 from ast import *
 from collections import defaultdict
-import graph_extractor 
 
 EDGE_TYPE = {
     'child': 0,
     'next_token': 1,
-    'last_use': 2,
-    'last_write': 3,
-    'last_lexical': 4,
+    'last_lexical': 2,
+    'last_use': 3,
+    'last_write': 4,
     'computed_from': 5
 }
 
@@ -97,10 +96,10 @@ class AstGraphGenerator(NodeVisitor):
                                 and self.use_ast and not self.is_revisit:
             self.graph[(self.parent, nid)].add(EDGE_TYPE['child'])
         if edge_type == 'next_token' and self.previous_token is not None \
-                                     and not self.is_revisit and False:
+                                     and not self.is_revisit:
             self.graph[(self.previous_token, nid)].add(EDGE_TYPE['next_token'])
         if edge_type == 'last_lexical' and label in self.last_lexical \
-                                       and not self.is_revisit and False:
+                                       and not self.is_revisit:
             self.graph[(nid, self.last_lexical[label])].add(EDGE_TYPE['last_lexical'])
         if edge_type == 'last_use' and not self.syntactic_only:
             for use in self.last_access[label][0]:
@@ -164,7 +163,8 @@ class AstGraphGenerator(NodeVisitor):
             self.__add_edge(nid, edge_type='child')
             self.__add_edge(nid, edge_type='next_token')
 
-            self.previous_token = nid
+            if not self.is_revisit:
+                self.previous_token = nid
         else:
             pass
 
@@ -186,9 +186,10 @@ class AstGraphGenerator(NodeVisitor):
         self.__add_edge(nid, label=label, edge_type='last_use')
         self.__add_edge(nid, label=label, edge_type='last_write')
 
-        self.previous_token = nid
-        if not self.syntactic_only:
+        if not self.is_revisit:
+            self.previous_token = nid
             self.last_lexical[label] = nid
+        if not self.syntactic_only:
             self.last_access[label][0] = {nid}
             if self.lvalue:
                 self.last_access[label][1] = {nid}
@@ -241,6 +242,8 @@ class AstGraphGenerator(NodeVisitor):
             self.terminal('@')
             self.visit(decorator)
 
+    # - Assign nodes need special attention since for data flow purposes they should be evaluated left to right -
+
     def visit_Assign(self, node):
         gparent = self.parent
         self.non_terminal(node)
@@ -251,7 +254,6 @@ class AstGraphGenerator(NodeVisitor):
                 self.terminal(', ')
             self.visit(target)
         self.syntactic_only = False
-
 
         self.terminal('=')
         self.visit(node.value)
@@ -267,9 +269,17 @@ class AstGraphGenerator(NodeVisitor):
         gparent = self.parent
         self.non_terminal(node)
         
+        lside_id = self.node_id
+        self.syntactic_only = True
         self.visit(node.target)
+        self.syntactic_only = False
+
         self.terminal(BINOP_SYMBOLS[type(node.op)] + '=')
         self.visit(node.value)
+
+        self.lvalue = True
+        self.revisit(node.target, root=lside_id)
+        self.lvalue = False
         self.parent = gparent
 
     def visit_ImportFrom(self, node):

@@ -34,14 +34,9 @@ from graph2sequence.sequence_gnn import SequenceGNN
 MAX_VERTICES_IN_GRAPH = 1000
 
 CONFIG = {
-    'num_epochs': 100,
-    'learning_rate': 0.0005,
-    'clamp_gradient_norm': 1.0,
+    'batch_size': 5000,
     'graph_state_dropout_keep_prob': 0.7,
-
-    'hidden_size': 256,
-    'num_timesteps': 4,
-    'attention':'Luong'
+    'decoder_cells_dropout_keep_prob': 0.9,
 }
 
 def load_data(data_dir, file_name, restrict = None):
@@ -78,7 +73,7 @@ def main():
     train_data = load_data(data_dir, train_data)
     valid_data = load_data(data_dir, valid_data)
 
-    if args.get('--no-train') is not None:
+    if args.get('--no-train'):
         CONFIG['num_epochs'] = 0
         
     args['--config'] =  json.dumps(CONFIG)

@@ -47,6 +47,40 @@ class BaseEmbeddingsGNN(BaseGNN):
         })
         return params
 
+    def get_rnn_cell(self, cell_type, h_dim, activation_name, num_layers=1, 
+                           dropout_keep_prob=1,
+                           use_cudnn=False):
+                           
+        if activation_name == 'tanh':
+            activation_fun = tf.nn.tanh
+        elif activation_name == 'relu':
+            activation_fun = tf.nn.relu
+
+        if use_cudnn and activation_name == 'tanh':
+            if cell_type == 'gru':
+                decoder_cell = tf.contrib.cudnn_rnn.CudnnGRU(num_layers, h_dim)
+            elif cell_type == 'lstm':
+                decoder_cell = tf.contrib.cudnn_rnn.CudnnLSTM(num_layers, h_dim)
+            
+        else: 
+            if cell_type == 'gru':
+                create_raw_cell = lambda: tf.contrib.rnn.GRUCell(h_dim, activation=activation_fun)
+            elif cell_type == 'lstm' and activation_name == 'tanh':
+                create_raw_cell = lambda: tf.nn.rnn_cell.LSTMCell(h_dim, activation=activation_fun)
+
+            create_cell = lambda: tf.nn.rnn_cell.DropoutWrapper(create_raw_cell(),
+                                                                input_keep_prob=dropout_keep_prob,
+                                                                state_keep_prob=dropout_keep_prob)
+
+            if num_layers > 1:
+                cells = [create_cell() for _ in range(num_layers)]
+                decoder_cell = tf.nn.rnn_cell.MultiRNNCell(cells)
+            else:
+                decoder_cell = create_cell()
+
+        return decoder_cell
+
+
     def prepare_specific_graph_model(self) -> None:
         h_dim = self.params['hidden_size']
 
@@ -60,12 +94,7 @@ class BaseEmbeddingsGNN(BaseGNN):
         self.placeholders['graph_state_keep_prob'] = tf.placeholder(tf.float32, None, name='graph_state_keep_prob')
 
         activation_name = self.params['graph_rnn_activation'].lower()
-        if activation_name == 'tanh':
-            activation_fun = tf.nn.tanh
-        elif activation_name == 'relu':
-            activation_fun = tf.nn.relu
-        else:
-            raise Exception("Unknown activation function type '%s'." % activation_name)
+        cell_type = self.params['graph_rnn_cell'].lower()
 
         self.weights['input_embeddings'] = tf.Variable(glorot_init([self.annotation_size, h_dim]),
                                                                     name='input_embeddings')
@@ -83,16 +112,9 @@ class BaseEmbeddingsGNN(BaseGNN):
                     self.weights['edge_biases'].append(tf.Variable(np.zeros([self.num_edge_types, h_dim], dtype=np.float32),
                                                                    name='gnn_edge_biases_%i' % layer_idx))
 
-                cell_type = self.params['graph_rnn_cell'].lower()
-                if cell_type == 'gru':
-                    cell = tf.nn.rnn_cell.GRUCell(h_dim, activation=activation_fun)
-                elif cell_type == 'rnn':
-                    cell = tf.nn.rnn_cell.BasicRNNCell(h_dim, activation=activation_fun)
-                else:
-                    raise Exception("Unknown RNN cell type '%s'." % cell_type)
-                cell = tf.nn.rnn_cell.DropoutWrapper(cell,
-                                                     state_keep_prob=self.placeholders['graph_state_keep_prob'])
-                self.weights['rnn_cells'].append(cell)
+                
+                encoder_cell = self.get_rnn_cell(cell_type, h_dim, activation_name, 1)
+                self.weights['rnn_cells'].append(encoder_cell)
 
     def compute_final_node_representations(self) -> tf.Tensor:
         h_dim = self.params['hidden_size']

@@ -21,10 +21,10 @@ class BaseGNN(object):
             'num_epochs': 3000,
             'patience': 25,
             'learning_rate': 0.0005,
-            'clamp_gradient_norm': 1.0,
+            'clamp_gradient_norm': 5.0,
             'out_layer_dropout_keep_prob': 1.0,
 
-            'hidden_size': 200,
+            'hidden_size': 256,
             'num_timesteps': 4,
             'use_graph': True,
 

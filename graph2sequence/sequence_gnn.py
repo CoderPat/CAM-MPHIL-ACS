@@ -40,26 +40,28 @@ class SequenceGNN(BaseEmbeddingsGNN):
     def default_params(cls):
         params = dict(super().default_params())
         params.update({
-            'batch_size': 10000,
-            'decoder_rnn_cell': 'gru',         # (num_classes)
-            'max_output_len': 10,
-            'learning_rate': 0.005,
+            'learning_rate': 0.001,
+            'num_timesteps': 3,
+            'use_edge_bias': True,
 
-            'decoder_layers' : 1,
-            'clamp_gradient_norm': 1.0,
-            'out_layer_dropout_keep_prob': 1.0,
-            'graph_state_dropout_keep_prob': 1.0,
+            'decoder_layers' : 2,
+            'decoder_rnn_cell': 'LSTM',         # (num_classes)
+            'decoder_num_units': 512,           # doesn't work yet
+            'hidden_size': 512,                 # so we change the encoder's aswell 
+            'decoder_rnn_activation': 'tanh',
+            'decoder_cells_dropout_keep_prob': 0.9,
 
-            'num_timesteps': 4,
+            'attention': 'Luong',
 
-            'tie_fwd_bkwd': True,
-            'attention': 'Luong'
+            'bleu': [1, 4],
+            'f1': True
         })
         return params
 
     def prepare_specific_graph_model(self) -> None:
         self.placeholders['graph_sizes'] = tf.placeholder(tf.int32, [None], name='graph_sizes')
         self.placeholders['decoder_inputs'] = tf.placeholder(tf.int32, [None, self.max_output_len+1], name='decoder_inputs')
+        self.placeholders['decoder_keep_prob'] = tf.placeholder(tf.float32, None, name='dropout_keep_prob')
         self.placeholders['sequence_lens'] = tf.placeholder(tf.int32, [None], name='sequence_lens')
         self.placeholders['target_mask'] = tf.placeholder(tf.float32, [None, self.max_output_len], name='target_mask')
         super().prepare_specific_graph_model()
@@ -123,7 +125,8 @@ class SequenceGNN(BaseEmbeddingsGNN):
             self.raw_targets = [graph['raw_targets'] for graph in data]
 
         # Pack until we cannot fit more graphs in the batch
-        dropout_keep_prob = self.params['graph_state_dropout_keep_prob'] if mode == ModeKeys.TRAIN else 1.
+        graph_dropout_keep_prob = self.params['graph_state_dropout_keep_prob'] if mode == ModeKeys.TRAIN else 1.
+        decoder_dropout_keep_prob = self.params['decoder_cells_dropout_keep_prob'] if mode == ModeKeys.TRAIN else 1.
         num_graphs = 0
         while num_graphs < len(data):
             num_graphs_in_batch = 0
@@ -183,7 +186,8 @@ class SequenceGNN(BaseEmbeddingsGNN):
                 self.placeholders['initial_node_representation']: (indices, batch_node_features.col, (batch_node_features.shape[0], )),
                 self.placeholders['num_incoming_edges_per_type']: np.concatenate(batch_num_incoming_edges_per_type, axis=0),
                 self.placeholders['num_graphs']: num_graphs_in_batch,
-                self.placeholders['graph_state_keep_prob']: dropout_keep_prob,
+                self.placeholders['graph_state_keep_prob']: graph_dropout_keep_prob,
+                self.placeholders['decoder_keep_prob']: decoder_dropout_keep_prob,
                 self.placeholders['graph_sizes'] : np.array(batch_graph_sizes)
             }
             if self.params['attention'] is None:
@@ -197,7 +201,6 @@ class SequenceGNN(BaseEmbeddingsGNN):
                     self.placeholders['decoder_inputs']: np.array(batch_decoder_inputs),
                     self.placeholders['sequence_lens']: np.array(batch_sequence_lens),
                     self.placeholders['target_mask'] : np.array(batch_target_mask),
-                    self.placeholders['graph_state_keep_prob']: dropout_keep_prob,
                 })
 
 
@@ -211,25 +214,19 @@ class SequenceGNN(BaseEmbeddingsGNN):
 
             yield batch_feed_dict
 
-
     def build_decoder_cell(self, last_h):
         h_dim = self.params['hidden_size']
         num_nodes = tf.shape(last_h, out_type=tf.int64)[0]
+        decoder_num_units = self.params['decoder_num_units']
 
-        #Build decoder cell
-        activation_name = self.params['graph_rnn_activation'].lower()
-        if activation_name == 'tanh':
-            activation_fun = tf.nn.tanh
-        elif activation_name == 'relu':
-            activation_fun = tf.nn.relu
-    
+        activation_name = self.params['decoder_rnn_activation'].lower()
         cell_type = self.params['decoder_rnn_cell'].lower()
-        if cell_type == 'gru':
-            decoder_cell = tf.nn.rnn_cell.GRUCell(h_dim, activation=activation_fun)
-        elif cell_type == 'rnn':
-            decoder_cell = tf.nn.rnn_cell.BasicRNNCell(h_dim, activation=activation_fun)
+        num_layers = self.params['decoder_layers']
 
-
+        decoder_cell = self.get_rnn_cell(cell_type, decoder_num_units, activation_name, num_layers, 
+                                         self.placeholders['decoder_keep_prob'])
+        dropout = self.params['decoder_cells_dropout_keep_prob']
+        
         if self.params['attention'] is None:
             graph_mask = tf.SparseTensor(indices=self.placeholders['graph_nodes_list'],
                                          values=tf.ones_like(self.placeholders['graph_nodes_list'][:, 0], dtype=tf.float32),
@@ -238,21 +235,35 @@ class SequenceGNN(BaseEmbeddingsGNN):
             graph_averages = (tf.sparse_tensor_dense_matmul(tf.cast(graph_mask, tf.float32), last_h)
                               / tf.reshape(tf.sparse_reduce_sum(graph_mask, 1), (-1, 1)))
 
+
             return decoder_cell, graph_averages
 
         elif self.params['attention'] == 'Luong':
             graph_embeddings = tf.reshape(last_h, shape=(self.placeholders['num_graphs'], 
                                                          self.max_num_vertices,
-                                                         h_dim))
+                                                         h_dim)) 
 
             graph_averages = (tf.reduce_sum(graph_embeddings, axis=1) / 
                               tf.reshape(tf.cast(self.placeholders["graph_sizes"], tf.float32), (-1, 1)))
 
             attention_mechanism = tf.contrib.seq2seq.LuongAttention(h_dim, graph_embeddings,
                                                                     memory_sequence_length=self.placeholders["graph_sizes"])
+
             decoder_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, attention_mechanism,
                                                                attention_layer_size=h_dim)
-            initial_state = decoder_cell.zero_state(self.placeholders['num_graphs'], tf.float32).clone(cell_state=graph_averages)
+
+            initial_state = tf.nn.rnn_cell.LSTMStateTuple(graph_averages, graph_averages) if cell_type == 'lstm' \
+                            else graph_averages
+
+            if num_layers > 1:
+                if cell_type == 'lstm':
+                    pad = [tf.nn.rnn_cell.LSTMStateTuple(tf.zeros((self.placeholders['num_graphs'],h_dim)), 
+                                                         tf.zeros((self.placeholders['num_graphs'],h_dim)))
+                                                for _ in range(num_layers-1)]
+
+                    initial_state = tuple([initial_state] + pad)
+                
+            initial_state = decoder_cell.zero_state(self.placeholders['num_graphs'], tf.float32).clone(cell_state=initial_state)
 
             return decoder_cell, initial_state
         else:
@@ -303,8 +314,10 @@ class SequenceGNN(BaseEmbeddingsGNN):
         crossent = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.cast(expected_outputs[:, :batch_max_len], tf.int32),
                                                                   logits=computed_logits)
 
-        return (tf.reduce_sum(crossent * self.placeholders['target_mask'][:, :batch_max_len]) / 
-                tf.cast(self.placeholders['num_graphs'], tf.float32))
+        normalized_crossent = (tf.reduce_sum(crossent * self.placeholders['target_mask'][:, :batch_max_len], axis=1) / 
+                               tf.cast(self.placeholders['sequence_lens'], tf.float32))
+        return (tf.reduce_sum(normalized_crossent) / 
+                tf.cast(self.placeholders['num_graphs'], tf.float32) )
 
 
     def get_validation_ops(self, computed_logits, _ ):
@@ -318,16 +331,28 @@ class SequenceGNN(BaseEmbeddingsGNN):
             return "loss : %.5f | instances/sec: %.2f", (loss, speed)
 
         elif mode == ModeKeys.EVAL:
+            format_string, metrics = "loss: %.5f", (loss,)
+
             #Extract sampled sentences from results
             sampled_ids = [sampled_sentence.tolist() for result in extra_results for sampled_sentence in result[0]]
 
             #Calculate BLEU and F1
             reference_corpus = [reference.tolist() for reference in self.raw_targets]
             sampled_sentences = self.get_translations(sampled_ids)
-            bleu = compute_bleu(reference_corpus, sampled_sentences, max_order=1)
-            f1 = compute_f1(reference_corpus, sampled_sentences, unk_token=0)
+            for n in self.params['bleu']:
+                bleu = compute_bleu(reference_corpus, sampled_sentences, max_order=n)
+                format_string += (" | BLEU-%d: " % n) + "%.5f"
+                metrics = metrics + (bleu, )
 
-            return "loss: %.5f | BLEU: %.5f | F1: %.5f | instances/sec: %.2f", (loss, bleu, f1, speed)
+            if self.params['f1']:
+                f1 = compute_f1(reference_corpus, sampled_sentences, unk_token=0)
+                format_string += " | F1: " + "%.5f"
+                metrics = metrics + (f1, )
+
+            format_string += " | instances/sec: %.2f"
+            metrics = metrics + (speed, )
+
+            return format_string, metrics
 
     def get_checkpoint_metric(self, valid_log):
         return valid_log[1]

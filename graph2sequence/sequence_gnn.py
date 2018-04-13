@@ -45,9 +45,8 @@ class SequenceGNN(BaseEmbeddingsGNN):
             'use_edge_bias': True,
 
             'decoder_layers' : 2,
-            'decoder_rnn_cell': 'LSTM',         # (num_classes)
+            'decoder_rnn_cell': 'GRU',         # (num_classes)
             'decoder_num_units': 512,           # doesn't work yet
-            'hidden_size': 512,                 # so we change the encoder's aswell 
             'decoder_rnn_activation': 'tanh',
             'decoder_cells_dropout_keep_prob': 0.9,
 
@@ -217,7 +216,7 @@ class SequenceGNN(BaseEmbeddingsGNN):
     def build_decoder_cell(self, last_h):
         h_dim = self.params['hidden_size']
         num_nodes = tf.shape(last_h, out_type=tf.int64)[0]
-        decoder_num_units = self.params['decoder_num_units']
+        decoder_num_units = h_dim #self.params['decoder_num_units']
 
         activation_name = self.params['decoder_rnn_activation'].lower()
         cell_type = self.params['decoder_rnn_cell'].lower()

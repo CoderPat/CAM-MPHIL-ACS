@@ -262,6 +262,9 @@ class SequenceGNN(BaseEmbeddingsGNN):
                                                 for _ in range(num_layers-1)]
 
                     initial_state = tuple([initial_state] + pad)
+                else:
+                    pad = [tf.zeros((self.placeholders['num_graphs'],h_dim)) for _ in range(num_layers-1)]
+                    initial_state = tuple([initial_state] + pad)
                 
             initial_state = decoder_cell.zero_state(self.placeholders['num_graphs'], tf.float32).clone(cell_state=initial_state)
 

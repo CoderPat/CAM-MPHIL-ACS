@@ -68,8 +68,8 @@ class SequenceGNN(BaseEmbeddingsGNN):
 
     def process_data(self, data, mode):
         restrict = self.args.get("--restrict_data")
-        if restrict is not None and restrict > 0:
-            data = data[:restrict]
+        if restrict is not None and int(restrict) > 0:
+            data = data[:int(restrict)]
 
         # Get some common data out:
         if mode == ModeKeys.TRAIN and (self.params['input_shape'] is None or self.params['target_vocab_size'] is None):

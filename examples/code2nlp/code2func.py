@@ -34,7 +34,7 @@ from graph2sequence.sequence_gnn import SequenceGNN
 MAX_VERTICES_IN_GRAPH = 1000
 
 CONFIG = {
-    'batch_size': 5000,
+    'batch_size': 100000,
     'graph_state_dropout_keep_prob': 0.7,
     'decoder_cells_dropout_keep_prob': 0.9,
 }

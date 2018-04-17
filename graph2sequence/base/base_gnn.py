@@ -97,8 +97,8 @@ class BaseGNN(object):
 
     def process_data(self, data, mode):
         restrict = self.args.get("--restrict_data")
-        if restrict is not None and restrict > 0:
-            data = data[:restrict]
+        if restrict is not None and int(restrict) > 0:
+            data = data[:int(restrict)]
 
         # Get some common data out:
         if self.params['input_shape'] is None or self.params['output_shape'] is None:
@@ -314,7 +314,7 @@ class BaseGNN(object):
         assert len(self.params) == len(data_to_load['params'])
         for (par, par_value) in self.params.items():
             # Fine to have different task_ids or num epochs:
-            if par not in ['task_ids', 'num_epochs']:
+            if par not in ['task_ids', 'num_epochs', 'batch_size']:
                 assert par_value == data_to_load['params'][par]
 
         variables_to_initialize = []

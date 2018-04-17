@@ -21,6 +21,12 @@ EDGE_TYPE = {
     'computed_from': 5
 }
 
+NODE_TYPE = {
+    'non_terminal': 0,
+    'terminal': 1,
+    'identifier': 2
+}
+
 BOOLOP_SYMBOLS = {
     And:        'and',
     Or:         'or'
@@ -79,6 +85,7 @@ class AstGraphGenerator(NodeVisitor):
         self.node_id = 0
         self.graph = defaultdict(set)
         self.node_label = {}
+        self.node_type = {}
         self.representations = []
 
         self.parent = None                #For child edges
@@ -110,8 +117,9 @@ class AstGraphGenerator(NodeVisitor):
 
 
        
-    def __create_node(self, label):
+    def __create_node(self, label, node_type):
         self.node_label[self.node_id] = label
+        self.node_type[self.node_id] = node_type
         self.node_id += 1
         return self.node_id - 1
 
@@ -158,7 +166,7 @@ class AstGraphGenerator(NodeVisitor):
 
     def terminal(self, label):
         if not self.identifier_only:
-            nid = self.__create_node(label)
+            nid = self.__create_node(label, NODE_TYPE['terminal'])
             
             self.__add_edge(nid, edge_type='child')
             self.__add_edge(nid, edge_type='next_token')
@@ -170,14 +178,14 @@ class AstGraphGenerator(NodeVisitor):
 
     def non_terminal(self, node):
         if self.use_ast:
-            nid = self.__create_node(node.__class__.__name__)
+            nid = self.__create_node(node.__class__.__name__ nid, NODE_TYPE['non_terminal']))
             self.__add_edge(nid)
             self.parent = nid
         else:
             pass
 
     def identifier(self, label):
-        nid = self.__create_node(label)
+        nid = self.__create_node(label, NODE_TYPE['identifier'])
 
         self.__add_edge(nid, edge_type='child')
         self.__add_edge(nid, edge_type='next_token')

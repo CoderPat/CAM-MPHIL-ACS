@@ -35,6 +35,7 @@ class SequenceGNN(BaseEmbeddingsGNN):
         super().__init__(args)
         self.max_output_len = 0
         self.target_vocab_size = 0
+        self.writer = None
 
     @classmethod
     def default_params(cls):
@@ -42,15 +43,15 @@ class SequenceGNN(BaseEmbeddingsGNN):
         params.update({
             'learning_rate': 0.001,
             'num_timesteps': 3,
-            'use_edge_bias': True,
 
             'decoder_layers' : 2,
-            'decoder_rnn_cell': 'GRU',         # (num_classes)
-            'decoder_num_units': 512,           # doesn't work yet
+            'decoder_rnn_cell': 'GRU',                  # (num_classes)
+            'decoder_num_units': 512,                   # doesn't work yet
             'decoder_rnn_activation': 'tanh',
             'decoder_cells_dropout_keep_prob': 0.9,
 
             'attention': 'Luong',
+            'attention_scope': None,
 
             'bleu': [1, 4],
             'f1': True
@@ -249,7 +250,8 @@ class SequenceGNN(BaseEmbeddingsGNN):
                                                                     memory_sequence_length=self.placeholders["graph_sizes"])
 
             decoder_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, attention_mechanism,
-                                                               attention_layer_size=h_dim)
+                                                               attention_layer_size=h_dim,
+                                                               alignment_history=True)
 
             initial_state = tf.nn.rnn_cell.LSTMStateTuple(graph_averages, graph_averages) if cell_type == 'lstm' \
                             else graph_averages
@@ -305,11 +307,24 @@ class SequenceGNN(BaseEmbeddingsGNN):
                                                             infer_helper, initial_state,
                                                             output_layer=self.projection_layer)
 
-            self.ops['infer_output'], _, _= tf.contrib.seq2seq.dynamic_decode(infer_decoder,
-                                                                              maximum_iterations=2*self.max_output_len)
+            self.ops['infer_output'], self.ops['final_context_state'], _ = tf.contrib.seq2seq.dynamic_decode(infer_decoder,
+                                                                                    maximum_iterations=2*self.max_output_len)
 
+            if self.params['attention'] is not None:
+                self.ops['alignment_history'] = self.create_attention_images_summary(self.ops['final_context_state'])
 
         return train_outputs.rnn_output
+
+    def create_attention_images_summary(self, final_context_state):
+        """create attention image and attention summary."""
+        attention_images = (final_context_state.alignment_history.stack())
+        # Reshape to (batch, src_seq_len, tgt_seq_len,1)
+        attention_images = tf.expand_dims(
+        tf.transpose(attention_images, [1, 2, 0]), -1)
+        # Scale to range [0, 255]
+        attention_images *= 255
+        attention_summary = tf.summary.image("attention_images", attention_images)
+        return attention_summary
 
     def get_loss(self, computed_logits, expected_outputs):
         batch_max_len = tf.reduce_max(self.placeholders['sequence_lens'])
@@ -326,7 +341,7 @@ class SequenceGNN(BaseEmbeddingsGNN):
         return [self.ops['infer_output'].sample_id]
 
     def get_inference_ops(self, computed_logits):
-        return [self.ops['infer_output'].sample_id]
+        return [self.ops['infer_output'].sample_id, self.alignment_summary]
 
     def get_log(self, loss, speed, extra_results, mode):
         if mode == ModeKeys.TRAIN:
@@ -368,6 +383,16 @@ class SequenceGNN(BaseEmbeddingsGNN):
         return sentences
 
     def process_inference(self, infer_results):
+        alignment_summary = [result[1] for result in infer_results]
+
+        if self.writer is None:
+            self.writer = tf.summary.FileWriter("alignment")
+            self.writer.add_graph(self.graph)
+
+        if self.params['attention'] is not None:
+            self.writer.add_summary(alignment_summary[0])
+            self.writer.close()
+
         sampled_ids = [sampled_sentence.tolist() for result in infer_results for sampled_sentence in result[0]]
         return self.get_translations(sampled_ids)
 

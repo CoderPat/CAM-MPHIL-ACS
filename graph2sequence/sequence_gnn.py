@@ -221,7 +221,7 @@ class SequenceGNN(BaseEmbeddingsGNN):
             yield batch_feed_dict
 
     def build_decoder_cell(self, last_h):
-        h_dim = self.params['hidden_size'] # self.params['decoder_num_units']
+        h_dim = self.params['decoder_num_units']
         num_nodes = tf.shape(last_h, out_type=tf.int64)[0]
 
         activation_name = self.params['decoder_rnn_activation'].lower()
@@ -292,7 +292,7 @@ class SequenceGNN(BaseEmbeddingsGNN):
 
         bridged_h = tf.matmul(last_h, self.weights['bridge'])
 
-        decoder_cell, initial_state = self.build_decoder_cell(last_h)
+        decoder_cell, initial_state = self.build_decoder_cell(bridged_h)
 
         decoder_emb_inp = tf.nn.embedding_lookup(self.weights['output_embeddings'], 
                                                  self.placeholders['decoder_inputs'])

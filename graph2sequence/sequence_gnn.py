@@ -36,13 +36,15 @@ class SequenceGNN(BaseEmbeddingsGNN):
         self.max_output_len = 0
         self.target_vocab_size = 0
         self.writer = None
+        self.max_scoped_vertices = 0
 
     @classmethod
     def default_params(cls):
         params = dict(super().default_params())
         params.update({
             'learning_rate': 0.001,
-            'num_timesteps': 3,
+            'num_timesteps': 4,
+            'hidden_size': 128,
 
             'decoder_layers' : 2,
             'decoder_rnn_cell': 'GRU',                  # (num_classes)
@@ -80,8 +82,11 @@ class SequenceGNN(BaseEmbeddingsGNN):
                 self.max_output_len = max(self.max_output_len, g['output'].shape[0] + 1)
                 self.target_vocab_size = max(self.target_vocab_size, np.max(g['output'])+1 if len(g['output'])>0 else 0) 
                 num_fwd_edge_types = max(num_fwd_edge_types, max([e[1] for e in g['graph']]))
-
-
+                
+                if self.params['attention_scope'] is not None:
+                    scoped_vertices = Counter(g['node_types'])[self.params['attention_scope']]
+                    self.max_scoped_vertices = max(self.max_scoped_vertices, scoped_vertices)
+                             
             self.num_edge_types = max(self.num_edge_types, num_fwd_edge_types * (1 if self.params['tie_fwd_bkwd'] else 2))
             self.annotation_size = max(self.annotation_size, data[0]["node_features"].shape[1])
             
@@ -215,15 +220,14 @@ class SequenceGNN(BaseEmbeddingsGNN):
             yield batch_feed_dict
 
     def build_decoder_cell(self, last_h):
-        h_dim = self.params['hidden_size']
+        h_dim = self.params['hidden_size'] # self.params['decoder_num_units']
         num_nodes = tf.shape(last_h, out_type=tf.int64)[0]
-        decoder_num_units = h_dim #self.params['decoder_num_units']
 
         activation_name = self.params['decoder_rnn_activation'].lower()
         cell_type = self.params['decoder_rnn_cell'].lower()
         num_layers = self.params['decoder_layers']
 
-        decoder_cell = self.get_rnn_cell(cell_type, decoder_num_units, activation_name, num_layers, 
+        decoder_cell = self.get_rnn_cell(cell_type, h_dim, activation_name, num_layers, 
                                          self.placeholders['decoder_keep_prob'])
         dropout = self.params['decoder_cells_dropout_keep_prob']
         
@@ -236,7 +240,6 @@ class SequenceGNN(BaseEmbeddingsGNN):
                               / tf.reshape(tf.sparse_reduce_sum(graph_mask, 1), (-1, 1)))
 
 
-            return decoder_cell, graph_averages
 
         elif self.params['attention'] == 'Luong':
             graph_embeddings = tf.reshape(last_h, shape=(self.placeholders['num_graphs'], 
@@ -253,25 +256,26 @@ class SequenceGNN(BaseEmbeddingsGNN):
                                                                attention_layer_size=h_dim,
                                                                alignment_history=True)
 
-            initial_state = tf.nn.rnn_cell.LSTMStateTuple(graph_averages, graph_averages) if cell_type == 'lstm' \
-                            else graph_averages
-
-            if num_layers > 1:
-                if cell_type == 'lstm':
-                    pad = [tf.nn.rnn_cell.LSTMStateTuple(tf.zeros((self.placeholders['num_graphs'],h_dim)), 
-                                                         tf.zeros((self.placeholders['num_graphs'],h_dim)))
-                                                for _ in range(num_layers-1)]
-
-                    initial_state = tuple([initial_state] + pad)
-                else:
-                    pad = [tf.zeros((self.placeholders['num_graphs'],h_dim)) for _ in range(num_layers-1)]
-                    initial_state = tuple([initial_state] + pad)
-                
-            initial_state = decoder_cell.zero_state(self.placeholders['num_graphs'], tf.float32).clone(cell_state=initial_state)
-
-            return decoder_cell, initial_state
         else:
             raise Exception("Unknown type of attention")
+
+        initial_state = tf.nn.rnn_cell.LSTMStateTuple(graph_averages, graph_averages) if cell_type == 'lstm' \
+                        else graph_averages
+
+        if num_layers > 1:
+            if cell_type == 'lstm':
+                pad = [tf.nn.rnn_cell.LSTMStateTuple(tf.zeros((self.placeholders['num_graphs'],h_dim)), 
+                                                        tf.zeros((self.placeholders['num_graphs'],h_dim)))
+                                            for _ in range(num_layers-1)]
+
+                initial_state = tuple([initial_state] + pad)
+            else:
+                pad = [tf.zeros((self.placeholders['num_graphs'],h_dim)) for _ in range(num_layers-1)]
+                initial_state = tuple([initial_state] + pad)
+            
+        initial_state = decoder_cell.zero_state(self.placeholders['num_graphs'], tf.float32).clone(cell_state=initial_state)
+
+        return decoder_cell, initial_state
 
 
     def build_output(self, last_h):
@@ -281,6 +285,11 @@ class SequenceGNN(BaseEmbeddingsGNN):
 
         self.weights['output_embeddings'] = tf.Variable(glorot_init([self.target_vocab_size+3, h_dim]),
                                                                      name='output_embeddings')
+
+        self.weights['bridge'] = tf.Variable(glorot_init([h_dim, self.params['decoder_num_units']]),
+                                                          name='bridge')
+
+        bridged_h = tf.matmul(last_h, self.weights['bridge'])
 
         decoder_cell, initial_state = self.build_decoder_cell(last_h)
 

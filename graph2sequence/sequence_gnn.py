@@ -45,6 +45,7 @@ class SequenceGNN(BaseEmbeddingsGNN):
             'learning_rate': 0.001,
             'num_timesteps': 4,
             'hidden_size': 128,
+            'tie_fwd_bkwd': False,
 
             'decoder_layers' : 2,
             'decoder_rnn_cell': 'GRU',                  # (num_classes)
@@ -350,7 +351,7 @@ class SequenceGNN(BaseEmbeddingsGNN):
         return [self.ops['infer_output'].sample_id]
 
     def get_inference_ops(self, computed_logits):
-        return [self.ops['infer_output'].sample_id, self.alignment_summary]
+        return [self.ops['infer_output'].sample_id, self.ops['alignment_history']]
 
     def get_log(self, loss, speed, extra_results, mode):
         if mode == ModeKeys.TRAIN:
@@ -399,7 +400,8 @@ class SequenceGNN(BaseEmbeddingsGNN):
             self.writer.add_graph(self.graph)
 
         if self.params['attention'] is not None:
-            self.writer.add_summary(alignment_summary[0])
+            for summary in alignment_summary:
+                self.writer.add_summary(alignment_summary[0])
             self.writer.close()
 
         sampled_ids = [sampled_sentence.tolist() for result in infer_results for sampled_sentence in result[0]]

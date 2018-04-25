@@ -43,6 +43,8 @@ class SequenceGNN(BaseEmbeddingsGNN):
         params.update({
             'learning_rate': 0.001,
             'num_timesteps': 3,
+            'use_edge_bias': False,
+            'tie_fwd_bkwd': False,
 
             'decoder_layers' : 2,
             'decoder_rnn_cell': 'GRU',                  # (num_classes)

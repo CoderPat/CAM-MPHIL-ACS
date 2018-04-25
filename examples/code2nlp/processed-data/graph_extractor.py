@@ -102,8 +102,7 @@ def process_data(inputs, outputs, task_type, input_vectorizer, output_vectorizer
 
             graph_node_labels.append([label for _, label in sorted(visitor.node_label.items())])
             
-            data.append({"graph":edge_list})
-            data.append({"node_types": node_type for _, node_type in sorted(visitor.node_type.items())})
+            data.append({"graph":edge_list, "node_types": [node_type for _, node_type in sorted(visitor.node_type.items())]})
 
         except Exception as e:
             errors += 1

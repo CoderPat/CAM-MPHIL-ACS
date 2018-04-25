@@ -178,7 +178,7 @@ class AstGraphGenerator(NodeVisitor):
 
     def non_terminal(self, node):
         if self.use_ast:
-            nid = self.__create_node(node.__class__.__name__ nid, NODE_TYPE['non_terminal']))
+            nid = self.__create_node(node.__class__.__name__, NODE_TYPE['non_terminal'])
             self.__add_edge(nid)
             self.parent = nid
         else:

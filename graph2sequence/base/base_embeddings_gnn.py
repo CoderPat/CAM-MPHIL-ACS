@@ -219,7 +219,7 @@ class BaseEmbeddingsGNN(BaseGNN):
         # Add backward edges as an additional edge type that goes backwards:
         if not (self.params['tie_fwd_bkwd']):
             for (edge_type, edges) in adj_lists.items():
-                bwd_edge_type = self.num_edge_types + edge_type
+                bwd_edge_type = int(self.num_edge_types/2) + edge_type
                 final_adj_lists[bwd_edge_type] = np.array(sorted((y, x) for (x, y) in edges), dtype=np.int32)
                 for (x, y) in edges:
                     num_incoming_edges_dicts_per_type[bwd_edge_type][y] += 1

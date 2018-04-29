@@ -52,6 +52,7 @@ class SequenceGNN(BaseEmbeddingsGNN):
             'decoder_num_units': 512,                   # doesn't work yet
             'decoder_rnn_activation': 'tanh',
             'decoder_cells_dropout_keep_prob': 0.9,
+            'sampled_softmax': 512,
 
             'attention': 'Luong',
             'attention_scope': None,
@@ -280,21 +281,27 @@ class SequenceGNN(BaseEmbeddingsGNN):
 
 
     def build_output(self, last_h):
-        h_dim = self.params['hidden_size']
+        encoder_units = self.params['hidden_size']
+        decoder_units = self.params['decoder_num_units']
 
         self.projection_layer = tf.layers.Dense(self.target_vocab_size+3)
+        print(self.target_vocab_size)
+        self.projection_layer.build(decoder_units)
 
-        self.weights['output_embeddings'] = tf.Variable(glorot_init([self.target_vocab_size+3, h_dim]),
-                                                                     name='output_embeddings')
+        #self.weights['output_embeddings'] = tf.Variable(glorot_init([self.target_vocab_size+3, h_dim]),
+        #                                                            name='output_embeddings')
 
-        self.weights['bridge'] = tf.Variable(glorot_init([h_dim, self.params['decoder_num_units']]),
+        self.projection_weights = self.projection_layer.kernel
+        self.projection_bias = self.projection_layer.bias
+
+        self.weights['bridge'] = tf.Variable(glorot_init([encoder_units, decoder_units]),
                                                           name='bridge')
 
         bridged_h = tf.matmul(last_h, self.weights['bridge'])
 
         decoder_cell, initial_state = self.build_decoder_cell(bridged_h)
 
-        decoder_emb_inp = tf.nn.embedding_lookup(self.weights['output_embeddings'], 
+        decoder_emb_inp = tf.nn.embedding_lookup(tf.transpose(self.projection_weights), 
                                                  self.placeholders['decoder_inputs'])
 
         with tf.variable_scope("train_decoder"):
@@ -303,14 +310,16 @@ class SequenceGNN(BaseEmbeddingsGNN):
                                                             time_major=False)
 
             train_decoder = tf.contrib.seq2seq.BasicDecoder(decoder_cell, 
-                                                            train_helper, initial_state,
-                                                            output_layer=self.projection_layer)
+                                                            train_helper, initial_state)
 
-            train_outputs, _, _= tf.contrib.seq2seq.dynamic_decode(train_decoder)
+            self.raw_outputs = tf.contrib.seq2seq.dynamic_decode(train_decoder)[0].rnn_output
+            flatten_output, original_shape = tf.reshape(self.raw_outputs, (-1, decoder_units)), tf.shape(self.raw_outputs)
+            train_outputs = tf.matmul(flatten_output, self.projection_weights) + self.projection_bias
+            train_outputs = tf.reshape(train_outputs, (original_shape[0], original_shape[1], self.target_vocab_size+3))
         
         with tf.variable_scope("infer_decoder"):
             start_tokens = tf.fill([self.placeholders['num_graphs']], tf.cast(self.go_symbol, tf.int32))
-            infer_helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(self.weights['output_embeddings'], 
+            infer_helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(tf.transpose(self.projection_weights), 
                                                                     start_tokens, self.eos_symbol)
    
             infer_decoder = tf.contrib.seq2seq.BasicDecoder(decoder_cell, 
@@ -323,7 +332,7 @@ class SequenceGNN(BaseEmbeddingsGNN):
             if self.params['attention'] is not None:
                 self.ops['alignment_history'] = self.create_attention_images_summary(self.ops['final_context_state'])
 
-        return train_outputs.rnn_output
+        return train_outputs
 
     def create_attention_images_summary(self, final_context_state):
         """create attention image and attention summary."""
@@ -338,8 +347,18 @@ class SequenceGNN(BaseEmbeddingsGNN):
 
     def get_loss(self, computed_logits, expected_outputs):
         batch_max_len = tf.reduce_max(self.placeholders['sequence_lens'])
-        crossent = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.cast(expected_outputs[:, :batch_max_len], tf.int32),
-                                                                  logits=computed_logits)
+        if self.params['sampled_softmax'] is not None:
+            crossent = tf.nn.sparse_softmax_cross_entropy_with_logits(weights=self.projection_weights,
+                                                                      biases=self.projection_bias,
+                                                                      labels=tf.cast(expected_outputs[:, :batch_max_len], tf.int32),
+                                                                      inputs=self.raw_outputs,
+                                                                      num_sampled=self.params['sampled_softmax'],
+                                                                      num_classes=self.target_vocab_size+3)
+
+        else:
+            crossent = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.cast(expected_outputs[:, :batch_max_len], tf.int32),
+                                                                      logits=computed_logits)
+
 
         normalized_crossent = (tf.reduce_sum(crossent * self.placeholders['target_mask'][:, :batch_max_len], axis=1) / 
                                tf.cast(self.placeholders['sequence_lens'], tf.float32))

@@ -330,30 +330,33 @@ class SequenceGNN(BaseEmbeddingsGNN):
                                                                                     maximum_iterations=2*self.max_output_len)
 
             if self.params['attention'] is not None:
-                self.ops['alignment_history'] = self.create_attention_images_summary(self.ops['final_context_state'])
+                self.ops['alignment_history'] = self.create_attention_coefs(self.ops['final_context_state'])
 
         return train_outputs
 
-    def create_attention_images_summary(self, final_context_state):
+    def create_attention_coefs(self, final_context_state):
         """create attention image and attention summary."""
         attention_images = (final_context_state.alignment_history.stack())
         # Reshape to (batch, src_seq_len, tgt_seq_len,1)
         attention_images = tf.expand_dims(
         tf.transpose(attention_images, [1, 2, 0]), -1)
-        # Scale to range [0, 255]
-        attention_images *= 255
-        attention_summary = tf.summary.image("attention_images", attention_images)
-        return attention_summary
+        return attention_images
 
     def get_loss(self, computed_logits, expected_outputs):
+        decoder_units = self.params['decoder_num_units']
         batch_max_len = tf.reduce_max(self.placeholders['sequence_lens'])
         if self.params['sampled_softmax'] is not None:
-            crossent = tf.nn.sparse_softmax_cross_entropy_with_logits(weights=self.projection_weights,
-                                                                      biases=self.projection_bias,
-                                                                      labels=tf.cast(expected_outputs[:, :batch_max_len], tf.int32),
-                                                                      inputs=self.raw_outputs,
-                                                                      num_sampled=self.params['sampled_softmax'],
-                                                                      num_classes=self.target_vocab_size+3)
+            inputs = tf.reshape(self.raw_outputs, (-1, decoder_units))
+
+            labels = tf.reshape(tf.cast(expected_outputs[:, :batch_max_len], tf.int32), (-1, 1))
+            crossent = tf.nn.sampled_softmax_loss(weights=tf.transpose(self.projection_weights),
+                                                  biases=self.projection_bias,
+                                                  labels=labels,
+                                                  inputs=inputs,
+                                                  num_sampled=self.params['sampled_softmax'],
+                                                  num_classes=self.target_vocab_size+3)
+
+            crossent = tf.reshape(crossent, (-1, batch_max_len))
 
         else:
             crossent = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.cast(expected_outputs[:, :batch_max_len], tf.int32),
@@ -411,20 +414,13 @@ class SequenceGNN(BaseEmbeddingsGNN):
             sentences.append(sampled_sentence)
         return sentences
 
-    def process_inference(self, infer_results):
-        alignment_summary = [result[1] for result in infer_results]
-
-        if self.writer is None:
-            self.writer = tf.summary.FileWriter("alignment")
-            self.writer.add_graph(self.graph)
-
-        if self.params['attention'] is not None:
-            for summary in alignment_summary:
-                self.writer.add_summary(alignment_summary[0])
-            self.writer.close()
-
+    def process_inference(self, infer_results, coefs=False):
+        coefs = [coef for result in infer_results for coef in result[1]]
         sampled_ids = [sampled_sentence.tolist() for result in infer_results for sampled_sentence in result[0]]
-        return self.get_translations(sampled_ids)
+        if coefs:
+            return self.get_translations(sampled_ids), coefs
+        else:
+            return self.get_translations(sampled_ids)
 
 
 def main():

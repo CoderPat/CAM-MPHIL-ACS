@@ -345,7 +345,8 @@ class SequenceGNN(BaseEmbeddingsGNN):
     def get_loss(self, computed_logits, expected_outputs):
         decoder_units = self.params['decoder_num_units']
         batch_max_len = tf.reduce_max(self.placeholders['sequence_lens'])
-        if self.params['sampled_softmax'] is not None:
+        if self.params['sampled_softmax'] is not None and \
+           self.params['sampled_softmax'] < self.target_vocab_size:
             inputs = tf.reshape(self.raw_outputs, (-1, decoder_units))
 
             labels = tf.reshape(tf.cast(expected_outputs[:, :batch_max_len], tf.int32), (-1, 1))

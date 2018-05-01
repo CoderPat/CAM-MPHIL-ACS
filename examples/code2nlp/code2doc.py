@@ -37,10 +37,10 @@ MAX_VERTICES_GRAPH = 1000
 MAX_OUTPUT_LEN = 100
 
 CONFIG = {
-    'hidden_size': 512,
+    'decoder_num_units': 1024,
     'batch_size': 50000,
     'graph_state_dropout_keep_prob': 1,
-    'learning_rate': 0.005
+    'learning_rate': 0.0005
 }
 
 def load_data(data_dir, file_name, restrict = None):

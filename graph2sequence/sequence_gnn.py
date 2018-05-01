@@ -279,7 +279,6 @@ class SequenceGNN(BaseEmbeddingsGNN):
 
         return decoder_cell, initial_state
 
-
     def build_output(self, last_h):
         encoder_units = self.params['hidden_size']
         decoder_units = self.params['decoder_num_units']
@@ -345,6 +344,8 @@ class SequenceGNN(BaseEmbeddingsGNN):
     def get_loss(self, computed_logits, expected_outputs):
         decoder_units = self.params['decoder_num_units']
         batch_max_len = tf.reduce_max(self.placeholders['sequence_lens'])
+
+        #Sampled Softmax 
         if self.params['sampled_softmax'] is not None and \
            self.params['sampled_softmax'] < self.target_vocab_size:
             inputs = tf.reshape(self.raw_outputs, (-1, decoder_units))
@@ -359,6 +360,7 @@ class SequenceGNN(BaseEmbeddingsGNN):
 
             crossent = tf.reshape(crossent, (-1, batch_max_len))
 
+        #Normal Softmax
         else:
             crossent = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.cast(expected_outputs[:, :batch_max_len], tf.int32),
                                                                       logits=computed_logits)
@@ -415,13 +417,17 @@ class SequenceGNN(BaseEmbeddingsGNN):
             sentences.append(sampled_sentence)
         return sentences
 
+    def infer(self, input_data, alignment_history=False):
+        res = super().infer(input_data)
+        if alignment_history:
+            return res
+        else:
+            return res[0]
+
     def process_inference(self, infer_results, coefs=False):
         coefs = [coef for result in infer_results for coef in result[1]]
         sampled_ids = [sampled_sentence.tolist() for result in infer_results for sampled_sentence in result[0]]
-        if coefs:
-            return self.get_translations(sampled_ids), coefs
-        else:
-            return self.get_translations(sampled_ids)
+        return self.get_translations(sampled_ids), coefs
 
 
 def main():

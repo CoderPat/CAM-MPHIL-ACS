@@ -69,8 +69,10 @@ class BaseEmbeddingsGNN(BaseGNN):
                 create_raw_cell = lambda: tf.nn.rnn_cell.LSTMCell(h_dim, activation=activation_fun)
 
             create_cell = lambda: tf.nn.rnn_cell.DropoutWrapper(create_raw_cell(),
-                                                                input_keep_prob=dropout_keep_prob,
-                                                                state_keep_prob=dropout_keep_prob)
+                                                                output_keep_prob=dropout_keep_prob,
+                                                                state_keep_prob=dropout_keep_prob,
+                                                                variational_recurrent=True,
+                                                                dtype=tf.float32)
 
             if num_layers > 1:
                 cells = [create_cell() for _ in range(num_layers)]

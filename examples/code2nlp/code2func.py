@@ -3,15 +3,15 @@ Usage:
     code2func.py [options]
 
 Options:
-    -h --help                Show this screen.
-    --log_dir DIR            Log dir name.
-    --data_dir DIR           Data dir name.
-    --restore FILE           File to restore weights from.
-    --no-train               Sets epochs to zero (only for already trained models)
-    --freeze-graph-model     Freeze weights of graph model components.
-    --training-data FILE     Location of the training data
-    --validation-data FILE   Location of the training data
-    --print-example FILE     Print random examples using the a vocabulary file
+    -h --help                   Show this screen.
+    --log_dir DIR               Log dir name.
+    --data_dir DIR              Data dir name.
+    --restore FILE              File to restore weights from.
+    --no-train                  Sets epochs to zero (only for already trained models)
+    --freeze-graph-model        Freeze weights of graph model components.
+    --training-data FILE        Location of the training data
+    --validation-data FILE      Location of the training data
+    --print-example FILE FILE   Print random examples using the a vocabulary file
 """
 
 from typing import List, Tuple, Dict, Sequence, Any
@@ -20,6 +20,7 @@ from docopt import docopt
 from collections import defaultdict
 from scipy.sparse import csr_matrix
 import pickle
+import matplotlib.pyplot as plt
 
 import numpy as np
 
@@ -62,8 +63,23 @@ def load_data(data_dir, file_name, restrict = None):
     print("Using %d out of %d" % (len(new_data), len(raw_data)))
     return new_data
 
+def attention_map(coefs, src_labels, tgt_labels):
+    coefs = coefs[:len(src_labels), :]
+    fig, ax = plt.subplots()
+    heatmap = ax.pcolor(coefs*255, cmap=plt.cm.gray, alpha=0.8)
+    ax.set_yticks(np.arange(coefs.shape[0]) + 0.5, minor=False)
+    ax.set_xticks(np.arange(coefs.shape[1]) + 0.5, minor=False)
+    ax.set_xticklabels(tgt_labels, minor=False)
+    ax.set_yticklabels(src_labels, minor=False)
+    plt.xticks(rotation=90)
+    ax.invert_yaxis()
+    ax.xaxis.tick_top()
+    ax.grid(False)
+    plt.show()
+
 
 def main():
+
     args = docopt(__doc__)
     data_dir = args.get('--data-dir') or './'
     train_data = args.get('--training-data') or "processed-data/graphs-body-decl-train.json"
@@ -87,6 +103,7 @@ def main():
             with open(output_vect, 'rb') as f:
                 output_vect = pickle.load(f)
             
+            predicted_tokens, coefs = model.infer(valid_data, alignment_history=True)
             predicted_names = output_vect.devectorize(model.infer(valid_data), indices_only=True)
             true_names = output_vect.devectorize([g['output'] for g in valid_data], indices_only=True)
             

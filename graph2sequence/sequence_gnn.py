@@ -46,13 +46,14 @@ class SequenceGNN(BaseEmbeddingsGNN):
             'num_timesteps': 4,
             'hidden_size': 128,
             'tie_fwd_bkwd': False,
+            'use_edge_bias': True,
 
             'decoder_layers' : 2,
             'decoder_rnn_cell': 'GRU',                  # (num_classes)
             'decoder_num_units': 512,                   # doesn't work yet
             'decoder_rnn_activation': 'tanh',
             'decoder_cells_dropout_keep_prob': 0.9,
-            'sampled_softmax': 512,
+            'sampled_softmax': None,
 
             'attention': 'Luong',
             'attention_scope': None,
@@ -336,9 +337,8 @@ class SequenceGNN(BaseEmbeddingsGNN):
     def create_attention_coefs(self, final_context_state):
         """create attention image and attention summary."""
         attention_images = (final_context_state.alignment_history.stack())
-        # Reshape to (batch, src_seq_len, tgt_seq_len,1)
-        attention_images = tf.expand_dims(
-        tf.transpose(attention_images, [1, 2, 0]), -1)
+        # Reshape to (batch, src_seq_len, tgt_seq_len)
+        attention_images = tf.transpose(attention_images, [1, 2, 0])
         return attention_images
 
     def get_loss(self, computed_logits, expected_outputs):

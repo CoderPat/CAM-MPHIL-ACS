@@ -11,7 +11,9 @@ Options:
     --freeze-graph-model        Freeze weights of graph model components.
     --training-data FILE        Location of the training data
     --validation-data FILE      Location of the training data
-    --print-example FILE FILE   Print random examples using the a vocabulary file
+    --print-example FILE  	Print random examples using the a vocabulary file
+    --print-alignment FILE   	Print random examples using the a vocabulary file
+
 """
 
 from typing import List, Tuple, Dict, Sequence, Any
@@ -20,6 +22,7 @@ from docopt import docopt
 from collections import defaultdict
 from scipy.sparse import csr_matrix
 import pickle
+import matplotlib
 import matplotlib.pyplot as plt
 
 import numpy as np
@@ -39,6 +42,8 @@ CONFIG = {
     'graph_state_dropout_keep_prob': 0.7,
     'decoder_cells_dropout_keep_prob': 0.9,
 }
+
+matplotlib.use('GTKAgg')
 
 def load_data(data_dir, file_name, restrict = None):
     full_path = os.path.join(data_dir, file_name)
@@ -64,7 +69,8 @@ def load_data(data_dir, file_name, restrict = None):
     return new_data
 
 def attention_map(coefs, src_labels, tgt_labels):
-    coefs = coefs[:len(src_labels), :]
+    coefs = coefs[:len(src_labels), :len(tgt_labels)]
+    print(coefs)
     fig, ax = plt.subplots()
     heatmap = ax.pcolor(coefs*255, cmap=plt.cm.gray, alpha=0.8)
     ax.set_yticks(np.arange(coefs.shape[0]) + 0.5, minor=False)
@@ -79,12 +85,12 @@ def attention_map(coefs, src_labels, tgt_labels):
 
 
 def main():
-
     args = docopt(__doc__)
     data_dir = args.get('--data-dir') or './'
     train_data = args.get('--training-data') or "processed-data/graphs-body-decl-train.json"
     valid_data = args.get('--validation-data') or "processed-data/graphs-body-decl-valid.json"
     output_vect = args.get('--print-example')
+    input_vect = args.get('--print-alignment')
 
     train_data = load_data(data_dir, train_data)
     valid_data = load_data(data_dir, valid_data)
@@ -106,12 +112,21 @@ def main():
             predicted_tokens, coefs = model.infer(valid_data, alignment_history=True)
             predicted_names = output_vect.devectorize(model.infer(valid_data), indices_only=True)
             true_names = output_vect.devectorize([g['output'] for g in valid_data], indices_only=True)
+            if input_vect is not None:
+                print("Loading input vectorizer")
+                with open(input_vect, 'rb') as f:
+                    input_vect = pickle.load(f)
+                valid_labels = [input_vect.devectorize(g['node_features']) for g in valid_data]
+
             
             print("printing random examples, press 'q' \to exit")
             while True:
                 random_example = random.randint(0, len(predicted_names)-1)
                 print("Predicted function name: %s" % "_".join(predicted_names[random_example]))
                 print("True function name: %s" % "_".join(true_names[random_example]))
+                if input_vect is not None:
+                    attention_map(coefs[random_example], valid_labels[random_example], predicted_names[random_example])
+
                 if (input() == 'q'):
                     break
     except:

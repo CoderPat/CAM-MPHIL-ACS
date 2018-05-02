@@ -151,8 +151,16 @@ class Vectorizer:
                 for index in vector:
                     terms.append(self.__reversed_dictionary[index] if index > 0 else 'UNK')
                 all_terms.append(terms)
+        else:
+            all_terms = []
+            i = 0
+            for ptr in vectors.indptr[1:]:
+                label = []
+                while i < ptr and i < len(vectors.indices):
+                    label.append(self.__reversed_dictionary[vectors.indices[i]] if vectors.indices[i] > 0 else 'UNK')
+                    i += 1
+                all_terms.append("_".join(label))
         return all_terms
-            
 
 
 class ThreadedIterator:

@@ -61,6 +61,7 @@ def load_data(data_dir, file_name, restrict = None):
         if shape[0] >= MAX_VERTICES_IN_GRAPH:
             continue 
 
+        g["node_types"] = np.array(d["node_types"])
         g["node_features"] = csr_matrix((data, indices, indptr), shape)
         g["output"] = np.array(d["output_features"])
         new_data.append(g)

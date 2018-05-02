@@ -16,7 +16,7 @@ Options:
 from typing import List, Tuple, Dict, Sequence, Any
 
 from docopt import docopt
-from collections import defaultdict
+from collections import defaultdict, Counter
 import numpy as np
 import tensorflow as tf
 import sys
@@ -65,6 +65,8 @@ class SequenceGNN(BaseEmbeddingsGNN):
 
     def prepare_specific_graph_model(self) -> None:
         self.placeholders['graph_sizes'] = tf.placeholder(tf.int32, [None], name='graph_sizes')
+        self.placeholders['scoped_size'] = tf.placeholder(tf.int32, [None], name='scoped_indexes')        
+        self.placeholders['scoped_indexes'] = tf.placeholder(tf.int32, [None, self.max_scoped_vertices, 2], name='scoped_indexes')
         self.placeholders['decoder_inputs'] = tf.placeholder(tf.int32, [None, self.max_output_len+1], name='decoder_inputs')
         self.placeholders['decoder_keep_prob'] = tf.placeholder(tf.float32, None, name='dropout_keep_prob')
         self.placeholders['sequence_lens'] = tf.placeholder(tf.int32, [None], name='sequence_lens')
@@ -85,10 +87,17 @@ class SequenceGNN(BaseEmbeddingsGNN):
                 self.max_output_len = max(self.max_output_len, g['output'].shape[0] + 1)
                 self.target_vocab_size = max(self.target_vocab_size, np.max(g['output'])+1 if len(g['output'])>0 else 0) 
                 num_fwd_edge_types = max(num_fwd_edge_types, max([e[1] for e in g['graph']]))
-                
                 if self.params['attention_scope'] is not None:
-                    scoped_vertices = Counter(g['node_types'])[self.params['attention_scope']]
-                    self.max_scoped_vertices = max(self.max_scoped_vertices, scoped_vertices)
+                    if isinstance(self.params['attention_scope'], int):
+                        self.max_scoped_vertices = max(self.max_scoped_vertices, 
+                                                        Counter(g['node_types'])[self.params['attention_scope']])
+                    elif isinstance(self.params['attention_scope'], List):
+                        counter = Counter(g['node_types'])
+                        self.max_scoped_vertices = max(self.max_scoped_vertices,
+                                                       sum([counter[scope] for scope in self.params['attention_scope']]))
+                    
+
+
                              
             self.num_edge_types = max(self.num_edge_types, num_fwd_edge_types * (1 if self.params['tie_fwd_bkwd'] else 2))
             self.annotation_size = max(self.annotation_size, data[0]["node_features"].shape[1])
@@ -122,6 +131,14 @@ class SequenceGNN(BaseEmbeddingsGNN):
                                              "decoder_inputs": decoder_input,
                                              "sequence_len": sequence_len})
 
+                if self.params['attention_scope'] is not None:
+                    if isinstance(self.params['attention_scope'], int):
+                        scoped_indexes = np.where(d['node_types'] == self.params['attention_scope'])[0]
+                    elif isinstance(self.params['attention_scope'], List):
+                        scoped_indexes = np.where(np.isin(d['node_types'], self.params['attention_scope']))[0]
+                    processed_graphs[-1]['scoped_indexes'] = scoped_indexes
+                     
+
         return processed_graphs
 
     def make_minibatch_iterator(self, data: Any, mode):
@@ -140,6 +157,8 @@ class SequenceGNN(BaseEmbeddingsGNN):
             num_graphs_in_batch = 0
             batch_node_features = csr_matrix(np.empty(shape=(0,data[0]['init'].shape[1])))
             batch_graph_sizes = []
+            batch_scoped_indexes = []
+            batch_scoped_len = []
             batch_target_task_values = []
             batch_decoder_inputs = []
             batch_sequence_lens = []
@@ -151,7 +170,6 @@ class SequenceGNN(BaseEmbeddingsGNN):
             
             final_graph_nodes = data[num_graphs]['init'].shape[0] if self.params['attention'] is None \
                                                                   else self.max_num_vertices
-
             while num_graphs < len(data) and node_offset + final_graph_nodes < self.params['batch_size']:
                 cur_graph = data[num_graphs]
                 num_nodes_in_graph = cur_graph['init'].shape[0]
@@ -183,6 +201,16 @@ class SequenceGNN(BaseEmbeddingsGNN):
                     batch_sequence_lens.append(cur_graph['sequence_len'])
                     batch_target_mask.append(cur_graph['sequence_len'] * [1] + (self.max_output_len - cur_graph['sequence_len'])*[0])
 
+                if self.params['attention_scope'] is not None:
+                    scoped_len = cur_graph['scoped_indexes'].shape[0]
+                    pad_size = self.max_scoped_vertices - scoped_len
+                    padded_scoped = np.concatenate((cur_graph['scoped_indexes'] + 1, 
+                                                   np.array(pad_size * [0])))
+                    padded_scoped = np.concatenate([[[num_graphs_in_batch]]*self.max_scoped_vertices, 
+                                                   padded_scoped[:,np.newaxis]], axis=1)
+                    batch_scoped_indexes.append(padded_scoped)
+                    batch_scoped_len.append(scoped_len)
+
                 num_graphs += 1
                 num_graphs_in_batch += 1
                 node_offset += num_nodes_in_graph
@@ -210,6 +238,10 @@ class SequenceGNN(BaseEmbeddingsGNN):
                     self.placeholders['sequence_lens']: np.array(batch_sequence_lens),
                     self.placeholders['target_mask'] : np.array(batch_target_mask),
                 })
+
+            if self.params['attention_scope'] is not None:
+                batch_feed_dict[self.placeholders['scoped_indexes']] = batch_scoped_indexes
+                batch_feed_dict[self.placeholders['scoped_size']] = batch_scoped_len
 
 
             # Merge adjacency lists and information about incoming nodes:
@@ -244,7 +276,7 @@ class SequenceGNN(BaseEmbeddingsGNN):
 
 
 
-        elif self.params['attention'] == 'Luong':
+        else:
             graph_embeddings = tf.reshape(last_h, shape=(self.placeholders['num_graphs'], 
                                                          self.max_num_vertices,
                                                          h_dim)) 
@@ -252,15 +284,24 @@ class SequenceGNN(BaseEmbeddingsGNN):
             graph_averages = (tf.reduce_sum(graph_embeddings, axis=1) / 
                               tf.reshape(tf.cast(self.placeholders["graph_sizes"], tf.float32), (-1, 1)))
 
-            attention_mechanism = tf.contrib.seq2seq.LuongAttention(h_dim, graph_embeddings,
-                                                                    memory_sequence_length=self.placeholders["graph_sizes"])
+            if self.params['attention_scope'] is not None:
+                padded_embeddings = tf.concat([tf.zeros((self.placeholders['num_graphs'], 1, h_dim), tf.float32),
+                                              graph_embeddings], axis=1)
+                attention_memory = tf.gather_nd(padded_embeddings,
+                                                self.placeholders['scoped_indexes'])
+                memory_length = self.placeholders["scoped_size"]
+            else:
+                attention_memory = graph_embeddings
+                memory_length = self.placeholders["graph_sizes"]
+
+            print(attention_memory.shape)
+            attention_mechanism = tf.contrib.seq2seq.LuongAttention(h_dim, attention_memory,
+                                                                    memory_sequence_length=memory_length)
 
             decoder_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, attention_mechanism,
                                                                attention_layer_size=h_dim,
                                                                alignment_history=True)
 
-        else:
-            raise Exception("Unknown type of attention")
 
         initial_state = tf.nn.rnn_cell.LSTMStateTuple(graph_averages, graph_averages) if cell_type == 'lstm' \
                         else graph_averages

@@ -86,7 +86,7 @@ def plot_code_graph(snippet):
 def process_data(inputs, outputs, task_type, input_vectorizer, output_vectorizer):
     data, graph_node_labels, docs_words = ([], [], [])
     num_inits, errors = (0,0)
-    doc_tokenizer = CountVectorizer().build_tokenizer()
+    doc_tokenizer = CountVectorizer().build_analyzer()
     
     for idx, (inp, output) in enumerate(zip(inputs, outputs)):
         try:
@@ -96,9 +96,10 @@ def process_data(inputs, outputs, task_type, input_vectorizer, output_vectorizer
             edge_list = [(origin, t, destination) for (origin, destination), edges in visitor.graph.items() for t in edges]
 
             if task_type == "func-doc":
-                docs_words.append(doc_tokenizer(output))
+                docs_words.append(doc_tokenizer(output.splitlines()[0]))
             if task_type == "body-decl":
                 docs_words.append(decl_tokenizer(output))
+
 
             graph_node_labels.append([label for _, label in sorted(visitor.node_label.items())])
             

@@ -34,13 +34,14 @@ import random
 from graph2sequence.sequence_gnn import SequenceGNN
 
 MAX_VERTICES_GRAPH = 1000
-MAX_OUTPUT_LEN = 100
+MAX_OUTPUT_LEN = 20
 
 CONFIG = {
-    'decoder_num_units': 1024,
-    'batch_size': 50000,
-    'graph_state_dropout_keep_prob': 1,
-    'learning_rate': 0.0005
+    'batch_size': 100000,
+    'graph_state_dropout_keep_prob': 0.8,
+    'decoder_cells_dropout_keep_prob': 0.9,    
+    'learning_rate': 0.002,
+    'attention_scope': None,
 }
 
 def load_data(data_dir, file_name, restrict = None):
@@ -55,6 +56,7 @@ def load_data(data_dir, file_name, restrict = None):
         g = {}
         g["graph"] = d["graph"]
         (data, indices, indptr, shape) = d["node_features"]
+        g["node_types"] = np.array(d["node_types"])
         g["node_features"] = csr_matrix((data, indices, indptr), shape)
         g["output"] = np.array(d["output_features"])
 

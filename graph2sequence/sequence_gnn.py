@@ -48,14 +48,14 @@ class SequenceGNN(BaseEmbeddingsGNN):
             'tie_fwd_bkwd': False,
             'use_edge_bias': True,
 
-            'decoder_layers' : 2,
+            'decoder_layers' : 1,
             'decoder_rnn_cell': 'GRU',                  # (num_classes)
             'decoder_num_units': 512,                   # doesn't work yet
             'decoder_rnn_activation': 'tanh',
             'decoder_cells_dropout_keep_prob': 0.9,
             'sampled_softmax': None,
 
-            'attention': 'Luong',
+            'attention': 'Bahdanau',
             'attention_scope': None,
 
             'bleu': [1, 4],
@@ -294,9 +294,12 @@ class SequenceGNN(BaseEmbeddingsGNN):
                 attention_memory = graph_embeddings
                 memory_length = self.placeholders["graph_sizes"]
 
-            print(attention_memory.shape)
-            attention_mechanism = tf.contrib.seq2seq.LuongAttention(h_dim, attention_memory,
-                                                                    memory_sequence_length=memory_length)
+            if self.params['attention'] == 'Luong':
+                attention_mechanism = tf.contrib.seq2seq.LuongAttention(h_dim, attention_memory,
+                                                                        memory_sequence_length=memory_length)
+            elif self.params['attention'] == 'Bahdanau':
+                attention_mechanism = tf.contrib.seq2seq.BahdanauAttention(h_dim, attention_memory,
+                                                                           memory_sequence_length=memory_length)
 
             decoder_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, attention_mechanism,
                                                                attention_layer_size=h_dim,

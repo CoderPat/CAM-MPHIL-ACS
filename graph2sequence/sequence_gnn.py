@@ -305,7 +305,7 @@ class SequenceGNN(BaseEmbeddingsGNN):
                 memory_length = self.placeholders["graph_sizes"]
 
             if beam_tile:
-                graph_embeddings = tf.contrib.seq2seq.tile_batch(graph_embeddings, self.params['beam_width'])
+                attention_memory = tf.contrib.seq2seq.tile_batch(attention_memory, self.params['beam_width'])
                 graph_averages = tf.contrib.seq2seq.tile_batch(graph_averages, self.params['beam_width'])
                 memory_length = tf.contrib.seq2seq.tile_batch(memory_length, self.params['beam_width'])
 
@@ -414,7 +414,7 @@ class SequenceGNN(BaseEmbeddingsGNN):
 
     def create_attention_coefs(self, final_context_state):
         """create attention image and attention summary."""
-        attention_images = (final_context_state.alignment_history.stack())
+        attention_images = (final_context_state.cell_state.alignment_history)
         # Reshape to (batch, src_seq_len, tgt_seq_len)
         attention_images = tf.transpose(attention_images, [1, 2, 0])
         return attention_images

@@ -53,6 +53,7 @@ class SequenceGNN(BaseEmbeddingsGNN):
             'decoder_num_units': 512,                   # doesn't work yet
             'decoder_rnn_activation': 'tanh',
             'decoder_cells_dropout_keep_prob': 0.9,
+            'beam_width': 10,
 
             'attention': 'Bahdanau',
             'attention_scope': None,
@@ -253,19 +254,10 @@ class SequenceGNN(BaseEmbeddingsGNN):
 
             yield batch_feed_dict
 
-    def build_decoder_cell(self, last_h):
-        h_dim = self.params['decoder_num_units']
-        num_nodes = tf.shape(last_h, out_type=tf.int64)[0]
-
-        activation_name = self.params['decoder_rnn_activation'].lower()
-        cell_type = self.params['decoder_rnn_cell'].lower()
-        num_layers = self.params['decoder_layers']
-
-        decoder_cell = self.get_rnn_cell(cell_type, h_dim, activation_name, num_layers, 
-                                         self.placeholders['decoder_keep_prob'])
-        dropout = self.params['decoder_cells_dropout_keep_prob']
-        
+    
+    def extract_from_graph(self, last_h):
         if self.params['attention'] is None:
+            #Extract directly from compressed node embeddings matrix
             graph_mask = tf.SparseTensor(
                 indices=self.placeholders['graph_nodes_list'],
                 values=tf.ones_like(self.placeholders['graph_nodes_list'][:, 0], dtype=tf.float32),
@@ -274,26 +266,48 @@ class SequenceGNN(BaseEmbeddingsGNN):
             graph_averages = (tf.sparse_tensor_dense_matmul(tf.cast(graph_mask, tf.float32), last_h)
                               / tf.reshape(tf.sparse_reduce_sum(graph_mask, 1), (-1, 1)))
 
-        else:
+            return graph_averages, None
 
+        else:
             #Reshape to a 3D tensor as [batch, nodes, h_dim]
             graph_embeddings = tf.reshape(last_h, shape=(self.placeholders['num_graphs'], 
                                                          self.max_num_vertices,
-                                                         h_dim)) 
+                                                         self.params['decoder_num_units'])) 
 
             graph_averages = (tf.reduce_sum(graph_embeddings, axis=1) / 
                               tf.reshape(tf.cast(self.placeholders["graph_sizes"], tf.float32), (-1, 1)))
 
+            return graph_averages, graph_embeddings
+
+
+    def build_decoder_cell(self, graph_averages, graph_embeddings, beam_tile=False):
+        h_dim = self.params['decoder_num_units']
+
+        activation_name = self.params['decoder_rnn_activation'].lower()
+        cell_type = self.params['decoder_rnn_cell'].lower()
+        num_layers = self.params['decoder_layers']
+        dropout = self.params['decoder_cells_dropout_keep_prob']
+
+        decoder_cell = self.get_rnn_cell(cell_type, h_dim, activation_name, num_layers, 
+                                         self.placeholders['decoder_keep_prob'])         
+        
+        #Wrap in attention
+        if self.params['attention'] is not None:
+
             # Deal with attention scopping
             if self.params['attention_scope'] is not None:
-                padded_embeddings = tf.concat([tf.zeros((self.placeholders['num_graphs'], 1, h_dim), tf.float32),
-                                              graph_embeddings], axis=1)
-                attention_memory = tf.gather_nd(padded_embeddings,
-                                                self.placeholders['scoped_indexes'])
+                pad_embedding = tf.zeros((self.placeholders['num_graphs'], 1, h_dim), tf.float32)
+                padded_embeddings = tf.concat([pad_embedding, graph_embeddings], axis=1)
+                attention_memory = tf.gather_nd(padded_embeddings, self.placeholders['scoped_indexes'])
                 memory_length = self.placeholders["scoped_size"]
             else:
                 attention_memory = graph_embeddings
                 memory_length = self.placeholders["graph_sizes"]
+
+            if beam_tile:
+                graph_embeddings = tf.contrib.seq2seq.tile_batch(graph_embeddings, self.params['beam_width'])
+                graph_averages = tf.contrib.seq2seq.tile_batch(graph_averages, self.params['beam_width'])
+                memory_length = tf.contrib.seq2seq.tile_batch(memory_length, self.params['beam_width'])
 
             # Pick attention mechanism
             if self.params['attention'] == 'Luong':
@@ -315,14 +329,15 @@ class SequenceGNN(BaseEmbeddingsGNN):
                 attention_layer_size=h_dim,
                 alignment_history=True)
 
-
+        # Generate initial state for decoder in case it's an LSTM
         initial_state = tf.nn.rnn_cell.LSTMStateTuple(graph_averages, graph_averages) if cell_type == 'lstm' \
                         else graph_averages
 
+        # Pad initial state in case of multilayer decoder
         if num_layers > 1:
             if cell_type == 'lstm':
                 pad = [tf.nn.rnn_cell.LSTMStateTuple(tf.zeros((self.placeholders['num_graphs'],h_dim)), 
-                                                        tf.zeros((self.placeholders['num_graphs'],h_dim)))
+                                                     tf.zeros((self.placeholders['num_graphs'],h_dim)))
                                             for _ in range(num_layers-1)]
 
                 initial_state = tuple([initial_state] + pad)
@@ -330,7 +345,8 @@ class SequenceGNN(BaseEmbeddingsGNN):
                 pad = [tf.zeros((self.placeholders['num_graphs'],h_dim)) for _ in range(num_layers-1)]
                 initial_state = tuple([initial_state] + pad)
             
-        initial_state = decoder_cell.zero_state(self.placeholders['num_graphs'], tf.float32).clone(cell_state=initial_state)
+        mult = self.params['beam_width'] if beam_tile else 1
+        initial_state = decoder_cell.zero_state(self.placeholders['num_graphs'] * mult, tf.float32).clone(cell_state=initial_state)   
 
         return decoder_cell, initial_state
 
@@ -340,18 +356,23 @@ class SequenceGNN(BaseEmbeddingsGNN):
 
         self.projection_layer = tf.layers.Dense(self.target_vocab_size+3)
         self.projection_layer.build(decoder_units)
+        self.projection_weights = self.projection_layer.kernel
 
         self.weights['bridge'] = tf.Variable(glorot_init([encoder_units, decoder_units]),
                                                           name='bridge')
 
         bridged_h = tf.matmul(last_h, self.weights['bridge'])
 
-        decoder_cell, initial_state = self.build_decoder_cell(bridged_h)
-
         decoder_emb_inp = tf.nn.embedding_lookup(tf.transpose(self.projection_weights), 
                                                  self.placeholders['decoder_inputs'])
 
-        with tf.variable_scope("train_decoder"):
+        graph_average, graph_embeddings = self.extract_from_graph(bridged_h)
+
+        # train decoding 
+        with tf.variable_scope("decoder"):
+
+            decoder_cell, initial_state = self.build_decoder_cell(graph_average, graph_embeddings)
+
             train_helper = tf.contrib.seq2seq.ScheduledEmbeddingTrainingHelper(
                 inputs=decoder_emb_inp,
                 sampling_probability=0.5, 
@@ -367,18 +388,19 @@ class SequenceGNN(BaseEmbeddingsGNN):
 
             train_outputs = tf.contrib.seq2seq.dynamic_decode(train_decoder)[0].rnn_output
         
-        with tf.variable_scope("infer_decoder"):
-            start_tokens = tf.fill([self.placeholders['num_graphs']], tf.cast(self.go_symbol, tf.int32))
+        with tf.variable_scope("decoder", reuse=True):
 
-            infer_helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(
-                embedding=tf.transpose(self.projection_weights), 
-                start_tokens=start_tokens, 
-                end_token=self.eos_symbol)
+            decoder_cell, initial_state = self.build_decoder_cell(graph_average, graph_embeddings, beam_tile=True)
+
+            start_tokens = tf.fill([self.placeholders['num_graphs']], tf.cast(self.go_symbol, tf.int32))
    
-            infer_decoder = tf.contrib.seq2seq.BasicDecoder(
+            infer_decoder = tf.contrib.seq2seq.BeamSearchDecoder(
                 cell=decoder_cell, 
-                helper=infer_helper, 
+                embedding=tf.transpose(self.projection_weights),
+                start_tokens=start_tokens, 
+                end_token=self.eos_symbol,
                 initial_state=initial_state,
+                beam_width=self.params['beam_width'],
                 output_layer=self.projection_layer)
 
             decode_state = tf.contrib.seq2seq.dynamic_decode(infer_decoder,
@@ -412,10 +434,10 @@ class SequenceGNN(BaseEmbeddingsGNN):
 
 
     def get_validation_ops(self, computed_logits, _ ):
-        return [self.ops['infer_output'].sample_id]
+        return [self.ops['infer_output'].predicted_ids[:, :, 0]]
 
     def get_inference_ops(self, computed_logits):
-        return [self.ops['infer_output'].sample_id, self.ops['alignment_history']]
+        return [self.ops['infer_output'].predicted_ids[:, :, 0], self.ops['alignment_history']]
 
     def get_log(self, loss, speed, extra_results, mode):
         if mode == ModeKeys.TRAIN:

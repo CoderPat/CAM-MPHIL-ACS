@@ -161,8 +161,19 @@ class Seq2Seq(object):
         self.projection_layer = tf.layers.Dense(
             self.tgt_vocab_size+3, use_bias=False)
 
-        self.decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(self.params['state_size'])
+        decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(self.params['state_size'])
 
+        attention_mechanism = tf.contrib.seq2seq.LuongAttention(
+            self.params['state_size'], self.encoder_output,
+            memory_sequence_length=self.placeholders['encoder_lengths'])
+
+        self.decoder_cell = tf.contrib.seq2seq.AttentionWrapper(
+            decoder_cell, attention_mechanism,
+            attention_layer_size=self.params['state_size'])
+
+        self.initial_state = self.decoder_cell.zero_state(self.batch_size, tf.float32).\
+            clone(cell_state=self.encoder_state)
+        
         self.build_train_decoder()
         self.build_infer_decoder()
 
@@ -174,7 +185,7 @@ class Seq2Seq(object):
             embedded_decoder_inp, self.placeholders['decoder_lengths'])
 
         decoder = tf.contrib.seq2seq.BasicDecoder(
-            self.decoder_cell, helper, self.encoder_state,
+            self.decoder_cell, helper, self.initial_state,
             output_layer=self.projection_layer)
         
         final_outputs, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder)
@@ -198,7 +209,7 @@ class Seq2Seq(object):
         maximum_iterations = self.params['max_output_len']
 
         decoder = tf.contrib.seq2seq.BasicDecoder(
-            self.decoder_cell, helper, self.encoder_state,
+            self.decoder_cell, helper, self.initial_state,
             output_layer=self.projection_layer)
 
         outputs, _, _ = tf.contrib.seq2seq.dynamic_decode(

@@ -27,6 +27,9 @@ class Seq2Seq(object):
             'random_seed': 0,
             'max_output_len': 30,
 
+            'bleu': [1, 4],
+            'f1': True,
+
             'input_shape': None,        # (max_num_vertices, num_edges_types, annotation_size)
             'output_shape': None        # for subclasses to decide
         } 
@@ -320,7 +323,7 @@ class Seq2Seq(object):
                 num_graphs += 1
                 num_graphs_in_batch += 1
                 node_offset += num_nodes_in_graph
-
+            
             batch_node_features = batch_node_features.tocoo()
             indices = np.array([[row] for row in batch_node_features.row])
 
@@ -358,7 +361,7 @@ class Seq2Seq(object):
             elif mode == ModeKeys.EVAL:
                 fetch_list = [self.train_loss, self.translations]
             elif mode == ModeKeys.INFER:
-                fetch_list = self.translations
+                fetch_list = [self.translations,]
 
             result = self.sess.run(fetch_list, feed_dict=batch_data)
 
@@ -538,6 +541,17 @@ class Seq2Seq(object):
             restore_ops.append(tf.variables_initializer(variables_to_initialize))
             self.sess.run(restore_ops)
 
+    def infer(self, input_data):
+        input_data = self.process_data(input_data, mode=ModeKeys.INFER)
+
+        with self.graph.as_default():
+            infer_results = self.run_epoch(None, input_data, ModeKeys.INFER)
+
+        return self.process_inference(infer_results)
+
+    def process_inference(self, infer_results, coefs=False):
+        sampled_ids = [sampled_sentence.tolist() for result in infer_results for sampled_sentence in result[0]]
+        return self.get_translations(sampled_ids)
 
 
             

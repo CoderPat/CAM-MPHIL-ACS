@@ -23,6 +23,8 @@ class Seq2Seq(object):
 
             'embedding_size': 512,
             'state_size': 512,
+            'encoder_layers': 2,
+            'decoder_layers': 2,
 
             'random_seed': 0,
             'max_output_len': 30,
@@ -142,8 +144,8 @@ class Seq2Seq(object):
                                                                  self.max_input_len,
                                                                  self.params['embedding_size']))
 
-        fwd_encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(self.params['state_size']/2)
-        bwd_encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(self.params['state_size']/2)
+        fwd_encoder_cell = tf.contrib.rnn.BasicLSTMCell(self.params['state_size']/2)
+        bwd_encoder_cell = tf.contrib.rnn.BasicLSTMCell(self.params['state_size']/2)
 
         output, state = tf.nn.bidirectional_dynamic_rnn(
             cell_fw=fwd_encoder_cell,
@@ -157,6 +159,16 @@ class Seq2Seq(object):
             tf.concat([fwd_c, bwd_c], axis=1), tf.concat([fwd_c, bwd_c], axis=1))
         self.encoder_output = tf.concat(output, axis=2)
 
+        for _ in range(self.params['encoder_layers'] - 1):
+            encoder_cell = tf.contrib.rnn.LSTMBlockFusedCell(self.params['state_size'])
+            output = tf.transpose(self.encoder_output, [1, 0, 2])
+            output, self.encoder_state = encoder_cell(
+                inputs=output,
+                sequence_length=self.placeholders['encoder_lengths'],
+                dtype=tf.float32
+            )
+            self.encoder_output = tf.transpose(output, [1, 0, 2])
+
     def build_decoders(self):
         self.decoder_embeddings = tf.get_variable(
             "decoder_embeddings", [self.tgt_vocab_size+3, self.params['embedding_size']])
@@ -164,7 +176,8 @@ class Seq2Seq(object):
         self.projection_layer = tf.layers.Dense(
             self.tgt_vocab_size+3, use_bias=False)
 
-        decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(self.params['state_size'])
+        cell = lambda: tf.nn.rnn_cell.BasicLSTMCell(self.params['state_size'])
+        decoder_cell = tf.contrib.rnn.MultiRNNCell([cell() for _ in range(self.params['decoder_layers'])])
 
         attention_mechanism = tf.contrib.seq2seq.LuongAttention(
             self.params['state_size'], self.encoder_output,
@@ -174,8 +187,11 @@ class Seq2Seq(object):
             decoder_cell, attention_mechanism,
             attention_layer_size=self.params['state_size'])
 
+        self.encoder_state = tuple([self.encoder_state for _ in range(self.params['decoder_layers'])])
+
         self.initial_state = self.decoder_cell.zero_state(self.batch_size, tf.float32).\
             clone(cell_state=self.encoder_state)
+
         
         self.build_train_decoder()
         self.build_infer_decoder()
@@ -203,6 +219,7 @@ class Seq2Seq(object):
         target_mask = tf.cast(self.placeholders['target_mask'], tf.float32)[:, :batch_max_len]
         self.train_loss = (tf.reduce_sum(crossent  * target_mask) 
                            / tf.cast(self.batch_size, tf.float32))
+
 
     def build_infer_decoder(self):
         start_tokens =  tf.fill([self.batch_size], tf.cast(self.go_symbol, tf.int32))

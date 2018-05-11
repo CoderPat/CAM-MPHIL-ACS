@@ -79,9 +79,10 @@ class BaseGNN(object):
         self.graph = tf.Graph()
         self.sess = tf.Session(graph=self.graph, config=config)
         with self.graph.as_default():
-            random.seed(self.params['random_seed'])
-            np.random.seed(self.params['random_seed'])
-            tf.set_random_seed(self.params['random_seed'])
+            if self.params['random_seed'] is not None:
+                random.seed(self.params['random_seed'])
+                np.random.seed(self.params['random_seed'])
+                tf.set_random_seed(self.params['random_seed'])
             self.placeholders = {}
             self.weights = {}
             self.ops = {}

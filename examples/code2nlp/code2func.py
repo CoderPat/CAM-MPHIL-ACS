@@ -88,8 +88,8 @@ def attention_map(coefs, src_labels, tgt_labels):
 def main():
     args = docopt(__doc__)
     data_dir = args.get('--data-dir') or './'
-    train_data = args.get('--training-data') or "processed-data/graphs-body-decl-train.json"
-    valid_data = args.get('--validation-data') or "processed-data/graphs-body-decl-valid.json"
+    train_data = args.get('--training-data') or "processed-data/graphs-body-name-train.json"
+    valid_data = args.get('--validation-data') or "processed-data/graphs-body-name-valid.json"
     output_vect = args.get('--print-example')
     input_vect = args.get('--print-alignment')
 

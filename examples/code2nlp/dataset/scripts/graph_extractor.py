@@ -13,7 +13,6 @@ Options:
     --save-input-vect FILE   File to save the created vectorizer for encoding token labels.
     --load-output-vect FILE  File to load a previously created vectorizer for encoding code descriptions.
     --save-output-vect FILE  File to save the created vectorizer for encoding code descriptions.
-    --print-example          Prints random graph examples
 """
 from ast import *
 import re
@@ -25,8 +24,7 @@ import itertools
 import pickle
 
 from scipy.sparse import csr_matrix
-
-from pygraphviz import *
+from nltk import word_tokenize
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -35,7 +33,7 @@ from graph2sequence.base.utils import Vectorizer
 from ast_graph_generator import *
 from sklearn.feature_extraction.text import CountVectorizer
 
-
+#Tokenizes code identifiers
 def splitter(identifier, ordered=False):
     identifiers = re.split('_|-', identifier)
     subtoken_dict = defaultdict(lambda: 0)
@@ -50,43 +48,16 @@ def splitter(identifier, ordered=False):
             
     return subtoken_list if ordered else dict(subtoken_dict)
 
+#Extracts function names
 def decl_tokenizer(decl):
     function_name = re.search('(?<=def )[\w_-]+(?=\(.*\):)', decl).group(0)
     return splitter(function_name, ordered=True)
-
-def plot_code_graph(snippet):
-
-    print(snippet)
-
-    color_dict = {
-        0 : 'blue',
-        1 : 'yellow',
-        2 : 'black',
-        3 : 'red',
-        4 : 'green',
-        5 : 'brown',
-    }
-    visitor = AstGraphGenerator() 
-    visitor.visit(parse(snippet))
-
-    A = AGraph(strict=False, directed=True)
-
-    for (u, v), edges in visitor.graph.items():
-        for edge in edges:
-            A.add_edge(u, v, color=color_dict[edge])
-    
-    for i, (nid, label) in enumerate(visitor.node_label.items()):
-        A.get_node(i).attr['label'] = "%s (%d)" % (label, nid)
-    
-
-    A.layout('dot')                                                                 
-    A.draw('multi.png')   
 
 
 def process_data(inputs, outputs, task_type, input_vectorizer, output_vectorizer):
     data, graph_node_labels, docs_words = ([], [], [])
     num_inits, errors = (0,0)
-    doc_tokenizer = CountVectorizer().build_analyzer()
+    doc_tokenizer = word_tokenize
     
     for idx, (inp, output) in enumerate(zip(inputs, outputs)):
         try:
@@ -96,70 +67,76 @@ def process_data(inputs, outputs, task_type, input_vectorizer, output_vectorizer
             edge_list = [(origin, t, destination) for (origin, destination), edges in visitor.graph.items() for t in edges]
 
             if task_type == "func-doc":
-                docs_words.append(doc_tokenizer(output.splitlines()[0]))
+                docs_words.append(doc_tokenizer(output))
             if task_type == "body-decl":
                 docs_words.append(decl_tokenizer(output))
 
-
             graph_node_labels.append([label for _, label in sorted(visitor.node_label.items())])
-            
             data.append({"graph":edge_list, "node_types": [node_type for _, node_type in sorted(visitor.node_type.items())]})
-
         except Exception as e:
             errors += 1
 
     print("Generated %d graphs out of %d snippets" % (len(inputs) - errors, len(inputs)))
 
-    all_node_labels = [splitter(label) for label in itertools.chain.from_iterable(graph_node_labels)]
-    all_words = [{word: 1} for word in itertools.chain.from_iterable(docs_words)]
+    node_labels = [[splitter(label) for label in graph] for graph in graph_node_labels]
 
     if input_vectorizer is None:
         input_vectorizer = Vectorizer()
-        all_node_counts = input_vectorizer.build_and_vectorize(all_node_labels)
+        node_counts = input_vectorizer.build_and_vectorize(node_labels)
     else:
-        all_node_counts = input_vectorizer.vectorize(all_node_labels)
+        node_counts = input_vectorizer.vectorize(node_labels)
 
     if output_vectorizer is None:
         output_vectorizer = Vectorizer()
-        all_word_indices = output_vectorizer.build_and_vectorize(all_words).indices
+        word_indices = output_vectorizer.build_and_vectorize(docs_words, subtokens=False)
     else:
-        all_word_indices = output_vectorizer.vectorize(all_words).indices
+        word_indices = output_vectorizer.vectorize(docs_words, subtokens=False)
 
-    prev_ind = 0
-    for i, labels in enumerate(graph_node_labels):
-        counts = all_node_counts[prev_ind:prev_ind+len(labels), :]
-        data[i]["node_features"] = (counts.data.tolist(), counts.indices.tolist(), 
-                                    counts.indptr.tolist(), counts.shape)
-        prev_ind += len(labels)
 
-    prev_ind = 0
-    for i, sentence in enumerate(docs_words):
-        data[i]["output_features"] = all_word_indices[prev_ind:prev_ind+len(sentence)].tolist()
-        prev_ind += len(sentence)
+    for i, (graph_counts, graph_indices) in enumerate(zip(node_counts, word_indices)):
+        data[i]["node_features"] = (graph_counts.data.tolist(), graph_counts.indices.tolist(), 
+                                    graph_counts.indptr.tolist(), graph_counts.shape)
+
+        data[i]["output_features"] = graph_indices
 
     return data, input_vectorizer, output_vectorizer
 
 
 if __name__ == "__main__":
     args = docopt(__doc__)
-    code_data = args.get('--code_data') or "../data/V2/repo_split/repo_split.parallel_methods_declbodies"
-    label_data = args.get('--label_data') or "../data/V2/repo_split/repo_split.parallel_methods_desc"
     task_type = args.get('--task_type') or "func-doc"
     split = args.get('--split') or "train"
-    output_file = args.get('--output_file') or "graphs-" + task_type + "-" + split + ".json"
-    input_vectorizer = args.get('--load-input-vect')
-    save_input_vect = args.get('--save-input-vect')
-    output_vectorizer = args.get('--load-output-vect')
-    save_output_vect = args.get('--save-output-vect')
-    print_example = args.get('--print-example')
 
+    #Change default files based on the task
+    if task_type == 'func-doc':
+        code_data = args.get('--code_data') or "../cleaned_data/parallel_declbodies"
+        label_data = args.get('--label_data') or "../cleaned_data/parallel_desc"
+    elif task_type == 'body-name':
+        code_data = args.get('--code_data') or "../cleaned_data/parallel_bodies"
+        label_data = args.get('--label_data') or "../cleaned_data/parallel_decl"
+
+    #Change default vectorizer behaviour based on split
+    if split == "train":
+        input_vectorizer = args.get('--load-input-vect') 
+        save_input_vect = args.get('--save-input-vect') or "../processed_data/input-" + task_type + "-vect.pickle"
+        output_vectorizer = args.get('--load-output-vect')
+        save_output_vect = args.get('--save-output-vect') or "../processed_data/input-" + task_type + "-vect.pickle"
+    else:
+        input_vectorizer = args.get('--load-input-vect') or "../processed_data/input-" + task_type + "-vect.pickle"
+        save_input_vect = args.get('--save-input-vect') 
+        output_vectorizer = args.get('--load-output-vect') or "../processed_data/input-" + task_type + "-vect.pickle"
+        save_output_vect = args.get('--save-output-vect') 
+
+    output_file = args.get('--output_file') or "../processed_data/graphs-" + task_type + "-" + split + ".json"
 
     with open(code_data + "." + split) as f:
-        inputs = f.readlines()
-    with open(label_data + "." + split, errors='ignore') as f:
-        labels = f.readlines()
+        inputs = [line for line in f.readlines()]
+    with open(label_data + "." + split) as f:
+        labels = [line[:-1] for line in f.readlines()]
 
     inputs = [inp.replace("DCNL ", "\n").replace("DCSP ", "\t") for inp in inputs]
+
+    #Unident body so it can be parsed
     if task_type == 'body-decl':
         inputs = ["\n".join([line[1:] for line in inp.split("\n")]) for inp in inputs]
 
@@ -175,8 +152,8 @@ if __name__ == "__main__":
         with open(output_vectorizer, 'rb') as f:
             output_vectorizer = pickle.load(f)
     
-    data, input_vectorizer, output_vectorizer = process_data(inputs, labels, task_type, 
-                                                             input_vectorizer, output_vectorizer)
+    data, input_vectorizer, output_vectorizer = process_data(
+        inputs, labels, task_type, input_vectorizer, output_vectorizer)
 
     if save_input_vect is not None:
         print("Saving input vectorizer")

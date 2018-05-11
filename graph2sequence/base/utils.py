@@ -11,6 +11,14 @@ import math
 
 SMALL_NUMBER = 1e-7
 
+# ---- INITIALIZATION ----
+
+def glorot_init(shape):
+    initialization_range = np.sqrt(6.0 / (shape[-2] + shape[-1]))
+    return np.random.uniform(low=-initialization_range, high=initialization_range, size=shape).astype(np.float32)
+
+# ---- METRICS ----- 
+
 def compute_bleu(references, translations, max_order=4):
     """
     Computes BLEU for a evaluation set of translations
@@ -107,61 +115,81 @@ def compute_f1(references, translations, beta=1, unk_token=None):
     return total_f1 / len(translations)
 
 
-def glorot_init(shape):
-    initialization_range = np.sqrt(6.0 / (shape[-2] + shape[-1]))
-    return np.random.uniform(low=-initialization_range, high=initialization_range, size=shape).astype(np.float32)
-
+# ---- VECTORIZER --------
 
 class Vectorizer:
-    def __init__(self, minimum_frequency=2):
+    def __init__(self, minimum_frequency=5, min_sentence_freq=2):
         self.__minimum_frequency = minimum_frequency
+        self.__min_sentence_freq = min_sentence_freq
         self.__dictionary = None
         self.__reversed_dictionary = None
     
-    def build_and_vectorize(self, term_dics):
+    def build_and_vectorize(self, corpus, subtokens=True):
         self.__dictionary = {}
-        counts = defaultdict(lambda: 0)
-        for term_dict in term_dics:
-            for term in term_dict.keys():
-                counts[term] += 1
-                if counts[term] == self.__minimum_frequency:
+        all_counts = defaultdict(lambda: 0)
+        distinct_counts = defaultdict(lambda: 0)
+        for sentence in corpus:
+            seen_tokens = set()
+            def process_term(term):
+                if term not in seen_tokens:
+                    distinct_counts[term] += 1
+                    seen_tokens.add(term)
+                all_counts[term] += 1
+                if term not in self.__dictionary and \
+                    all_counts[term] >= self.__minimum_frequency and \
+                    distinct_counts[term] >= self.__min_sentence_freq:
                     self.__dictionary[term] = len(self.__dictionary)+1
 
-        self.__reversed_dictionary = dict(zip(self.__dictionary.values(), self.__dictionary.keys()))
-        return self.vectorize(term_dics)
-        
-    def vectorize(self, term_dics, indices_only=False):
-        indices, indptr, values = ([], [0], [])
-        for term_dict in term_dics:
-            for term, frequency in term_dict.items():
-                indices.append(self.__dictionary[term] if term in self.__dictionary else 0)
-                values.append(frequency)
-            indptr.append(indptr[-1]+len(term_dict))
-        
-        if indices_only:
-            return indices
-        else:
-            return csr_matrix((values, indices, indptr), (len(term_dics), len(self.__dictionary)+1))
+            if subtokens:
+                for term_dict in sentence:
+                    for term in term_dict.keys():
+                        process_term(term)
 
-    def devectorize(self, vectors, indices_only=False):
+            else:
+                for term in sentence:
+                    process_term(term)
+
+        self.__reversed_dictionary = dict(zip(self.__dictionary.values(), self.__dictionary.keys()))
+        return self.vectorize(corpus, subtokens=subtokens)
+        
+    def vectorize(self, corpus, subtokens=True):
+        if subtokens:
+            vectors = []
+            for sentence in corpus:
+                indices, indptr, values = ([], [0], [])
+                for term_dict in sentence:
+                    for term, frequency in term_dict.items():
+                        indices.append(self.__dictionary[term] if term in self.__dictionary else 0)
+                        values.append(frequency)
+                    indptr.append(indptr[-1]+len(term_dict))
+                vectors.append(csr_matrix((values, indices, indptr), (len(sentence), len(self.__dictionary)+1)))
+            return vectors
+        else:
+            return [[self.__dictionary[term] if term in self.__dictionary else 0 for term in sentence] for sentence in corpus]
+
+
+    def devectorize(self, vectors, subtokens=True):
         all_terms = []
-        if indices_only:
+        if subtokens:
+            for vector in vectors:
+                i = 0
+                terms = []
+                for ptr in vector.indptr[1:]:
+                    label = []
+                    while i < ptr and i < len(vector.indices):
+                        label.append(self.__reversed_dictionary[vector.indices[i]] if vector.indices[i] > 0 else 'UNK')
+                        i += 1
+                    terms.append("_".join(label))
+                all_terms.append(terms)
+        else:
             for vector in vectors:
                 terms = []
                 for index in vector:
                     terms.append(self.__reversed_dictionary[index] if index > 0 else 'UNK')
                 all_terms.append(terms)
-        else:
-            all_terms = []
-            i = 0
-            for ptr in vectors.indptr[1:]:
-                label = []
-                while i < ptr and i < len(vectors.indices):
-                    label.append(self.__reversed_dictionary[vectors.indices[i]] if vectors.indices[i] > 0 else 'UNK')
-                    i += 1
-                all_terms.append("_".join(label))
         return all_terms
 
+#--- Threaded iterator for minibatch handling ---
 
 class ThreadedIterator:
     """An iterator object that computes its elements in a parallel thread to be ready to be consumed.
@@ -184,6 +212,7 @@ class ThreadedIterator:
             yield next_element
             next_element = self.__queue.get(block=True)
         self.__thread.join()
+
 
 
 class MLP(object):

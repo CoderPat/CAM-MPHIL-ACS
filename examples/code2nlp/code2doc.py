@@ -31,7 +31,7 @@ import pdb
 import pickle
 import random
 
-from graph2sequence.sequence_gnn import SequenceGNN
+from graph2sequence.sequence_gnn import Graph2Seq
 
 MAX_VERTICES_GRAPH = 1000
 MAX_OUTPUT_LEN = 20
@@ -70,9 +70,11 @@ def load_data(data_dir, file_name, restrict = None):
 
 def main():
     args = docopt(__doc__)
-    data_dir = args.get('--data-dir') or './'
-    train_data = args.get('--training-data') or "dataset/processed_data/graphs-func-doc-train.json"
-    valid_data = args.get('--validation-data') or "dataset/processed_data/graphs-func-doc-valid.json"
+    data_dir = args.get('--data-dir') or 'dataset/processed_data/'
+    train_data = args.get('--training-data') or "graphs-func-doc-train.json"
+    valid_data = args.get('--validation-data') or "graphs-func-doc-valid.json"
+    test_data = args.get('--testing-data') or "graphs-func-doc-test.json"
+    input_vect = args.get('--print-alignment')
     output_vect = args.get('--print-example')
 
     train_data = load_data(data_dir, train_data)
@@ -84,8 +86,9 @@ def main():
     args['--config'] = json.dumps(CONFIG)
 
     try:
-        model = SequenceGNN(args)
+        model = Graph2Seq(args)
         model.train(train_data, valid_data)
+        model.evaluate(test_data)
 
         if output_vect is not None:
             print("Loading output vectorizer")

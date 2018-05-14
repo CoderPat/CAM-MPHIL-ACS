@@ -28,7 +28,7 @@ from scipy.sparse import vstack, csr_matrix
 from .base.base_embeddings_gnn import BaseEmbeddingsGNN
 from .base.utils import glorot_init, MLP, compute_bleu, compute_f1
 
-class SequenceGNN(BaseEmbeddingsGNN):
+class Graph2Seq(BaseEmbeddingsGNN):
     """
     """
     def __init__(self, args):
@@ -484,6 +484,7 @@ class SequenceGNN(BaseEmbeddingsGNN):
             return res
         else:
             return res[0]
+
 
     def process_inference(self, infer_results, coefs=False):
         coefs = [coef for result in infer_results for coef in result[1]]

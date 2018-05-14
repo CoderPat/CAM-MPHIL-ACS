@@ -471,6 +471,20 @@ class Seq2Seq(object):
                     print("Stopping training after %i epochs without improvement on checkpoint metric" % self.params['patience'])
                     break
 
+    def evaluate(self, test_data):
+        test_data = self.process_data(test_data, mode=ModeKeys.EVAL)
+
+        with self.graph.as_default():
+            infer_results = self.run_epoch(None, test_data, ModeKeys.EVAL)
+        
+        test_loss, test_results, test_speed = self.run_epoch("Testing... ", 
+                                                              test_data, ModeKeys.EVAL)
+
+        format_string, test_log = self.get_log(valid_loss, valid_speed, valid_results,
+                                               ModeKeys.EVAL)
+
+        print(("\r\x1b[K Test: " + format_string) % valid_log)
+
 
     def get_log(self, loss, speed, extra_results, mode):
         if mode == ModeKeys.TRAIN:

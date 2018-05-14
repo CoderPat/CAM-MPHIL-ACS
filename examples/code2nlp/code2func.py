@@ -33,7 +33,9 @@ import json
 import sys, traceback
 import pdb
 
-from graph2sequence.sequence_gnn import SequenceGNN
+from graph2sequence.sequence_gnn import Graph2Seq
+
+from graph2sequence.base.utils import compute_bleu, compute_f1
 
 MAX_VERTICES_IN_GRAPH = 1000
 
@@ -87,14 +89,16 @@ def attention_map(coefs, src_labels, tgt_labels):
 
 def main():
     args = docopt(__doc__)
-    data_dir = args.get('--data-dir') or './'
-    train_data = args.get('--training-data') or "processed-data/graphs-body-name-train.json"
-    valid_data = args.get('--validation-data') or "processed-data/graphs-body-name-valid.json"
-    output_vect = args.get('--print-example')
+    data_dir = args.get('--data-dir') or 'dataset/processed_data/'
+    train_data = args.get('--training-data') or "graphs-body-name-train.json"
+    valid_data = args.get('--validation-data') or "graphs-body-name-valid.json"
+    test_data = args.get('--testing-data') or "graphs-body-name-test.json"
     input_vect = args.get('--print-alignment')
+    output_vect = args.get('--print-example')
 
     train_data = load_data(data_dir, train_data)
     valid_data = load_data(data_dir, valid_data)
+    test_data = load_data(data_dir, test_data)
 
     if args.get('--no-train'):
         CONFIG['num_epochs'] = 0
@@ -102,8 +106,9 @@ def main():
     args['--config'] =  json.dumps(CONFIG)
 
     try:
-        model = SequenceGNN(args)
+        model = Graph2Seq(args)
         model.train(train_data, valid_data)
+        model.evaluate(test_data)
         
         if output_vect is not None:
             print("Loading output vectorizer")

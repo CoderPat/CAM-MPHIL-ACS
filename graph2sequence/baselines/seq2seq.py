@@ -18,13 +18,13 @@ class Seq2Seq(object):
         return {
             'num_epochs': 3000,
             'patience': 25,
-            'learning_rate': 0.0005,
+            'learning_rate': 0.001,
             'clamp_gradient_norm': 5.0,
 
             'embedding_size': 512,
             'state_size': 512,
-            'encoder_layers': 2,
-            'decoder_layers': 2,
+            'encoder_layers': 1,
+            'decoder_layers': 1,
 
             'random_seed': 0,
             'max_output_len': 30,
@@ -176,7 +176,7 @@ class Seq2Seq(object):
         self.projection_layer = tf.layers.Dense(
             self.tgt_vocab_size+3, use_bias=False)
 
-        cell = lambda: tf.nn.rnn_cell.BasicLSTMCell(self.params['state_size'])
+        cell = lambda: tf.contrib.rnn.LayerNormBasicLSTMCell(self.params['state_size'])
         decoder_cell = tf.contrib.rnn.MultiRNNCell([cell() for _ in range(self.params['decoder_layers'])])
 
         attention_mechanism = tf.contrib.seq2seq.LuongAttention(

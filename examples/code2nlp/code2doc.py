@@ -33,15 +33,17 @@ import random
 
 from graph2sequence.sequence_gnn import Graph2Seq
 
-MAX_VERTICES_GRAPH = 1000
-MAX_OUTPUT_LEN = 20
+MAX_VERTICES_GRAPH = 700
+MAX_OUTPUT_LEN = 100
 
 CONFIG = {
-    'batch_size': 100000,
+    'batch_size': 25000,
     'graph_state_dropout_keep_prob': 0.8,
     'decoder_cells_dropout_keep_prob': 0.9,    
-    'learning_rate': 0.002,
+    'learning_rate': 0.001,
+    'layer_timesteps': [2, 2, 2, 2],
     'attention_scope': None,
+    'random_seed' : None,
 }
 
 def load_data(data_dir, file_name, restrict = None):

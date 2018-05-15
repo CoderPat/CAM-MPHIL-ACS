@@ -22,6 +22,8 @@ import gc
 import json
 import itertools
 import pickle
+from tempfile import NamedTemporaryFile
+import subprocess
 
 from scipy.sparse import csr_matrix
 from nltk import word_tokenize
@@ -32,6 +34,20 @@ import matplotlib.pyplot as plt
 from graph2sequence.base.utils import Vectorizer
 from ast_graph_generator import *
 from sklearn.feature_extraction.text import CountVectorizer
+
+MOSES_TOKENIZER = False
+
+def moses_tonenization(descriptions):
+    temp_file = NamedTemporaryFile(delete=True)
+    with open(temp_file.name, 'w') as g:
+        g.writelines(descriptions)
+
+    with open(temp_file.name, 'r') as g:
+        process = subprocess.run(["perl", "tokenizer.perl"], 
+                                  stdout=subprocess.PIPE,
+                                  stdin=temp_file)
+    return process.stdout.decode('utf-8').split('\n')[:-1]
+
 
 #Tokenizes code identifiers
 def splitter(identifier, ordered=False):
@@ -57,7 +73,7 @@ def decl_tokenizer(decl):
 def process_data(inputs, outputs, task_type, input_vectorizer, output_vectorizer):
     data, graph_node_labels, docs_words = ([], [], [])
     num_inits, errors = (0,0)
-    doc_tokenizer = word_tokenize
+    doc_tokenizer = (lambda s: s.split()) if MOSES_TOKENIZER else word_tokenize
     
     for idx, (inp, output) in enumerate(zip(inputs, outputs)):
         try:
@@ -131,14 +147,17 @@ if __name__ == "__main__":
 
     with open(code_data + "." + split) as f:
         inputs = [line for line in f.readlines()]
-    with open(label_data + "." + split) as f:
-        labels = [line[:-1] for line in f.readlines()]
+    with open(label_data + "." + split, 'rb') as f:
+        labels = [line.decode('utf-8') for line in f.readlines()]
 
     inputs = [inp.replace("DCNL ", "\n").replace("DCSP ", "\t") for inp in inputs]
 
     #Unident body so it can be parsed
     if task_type == 'body-decl':
         inputs = ["\n".join([line[1:] for line in inp.split("\n")]) for inp in inputs]
+
+    if MOSES_TOKENIZER:
+        labels = moses_tonenization(labels)
 
     labels = [label.replace("DCNL ", "\n").replace("DCSP ", "\t") for label in labels]
 

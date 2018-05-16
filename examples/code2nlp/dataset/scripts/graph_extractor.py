@@ -14,7 +14,7 @@ Options:
     --load-output-vect FILE  File to load a previously created vectorizer for encoding code descriptions.
     --save-output-vect FILE  File to save the created vectorizer for encoding code descriptions.
 """
-from ast import *
+from ast import parse
 import re
 from collections import defaultdict
 from docopt import docopt
@@ -87,8 +87,12 @@ def process_data(inputs, outputs, task_type, input_vectorizer, output_vectorizer
             if task_type == "body-decl":
                 docs_words.append(decl_tokenizer(output))
 
-            graph_node_labels.append([label for _, label in sorted(visitor.node_label.items())])
-            data.append({"graph":edge_list, "node_types": [node_type for _, node_type in sorted(visitor.node_type.items())]})
+            graph_node_labels.append([label.strip() for _, label in sorted(visitor.node_label.items())])
+            data.append({"graph":edge_list, 
+                         "node_types": [node_type for _, node_type in sorted(visitor.node_type.items())],
+                         "primary_path": visitor.terminal_path})
+
+
         except Exception as e:
             errors += 1
 

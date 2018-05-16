@@ -33,15 +33,14 @@ import random
 
 from graph2sequence.baselines.seq2seq import Seq2Seq
 
-MAX_VERTICES_GRAPH = 1000
-MAX_OUTPUT_LEN = 20
+MAX_VERTICES_GRAPH = 500
+MAX_OUTPUT_LEN = 100
 
 CONFIG = {
-    'batch_size': 10000,
-    'graph_state_dropout_keep_prob': 0.8,
-    'decoder_cells_dropout_keep_prob': 0.9,    
-    'learning_rate': 0.002,
-    'attention_scope': None,
+    'batch_size': 50000,
+    'learning_rate': 0.001,
+    'graph_state_dropout_keep_prob': 1.,
+    'decoder_cells_dropout_keep_prob': 1.,
 }
 
 def load_data(data_dir, file_name, restrict = None):
@@ -60,7 +59,7 @@ def load_data(data_dir, file_name, restrict = None):
         g["node_features"] = csr_matrix((data, indices, indptr), shape)
         g["output"] = np.array(d["output_features"])
 
-        if shape[0] >= MAX_VERTICES_GRAPH or len(g["output"]) >= MAX_OUTPUT_LEN:
+        if shape[0] > MAX_VERTICES_GRAPH or len(g["output"]) > MAX_OUTPUT_LEN:
             continue
 
         new_data.append(g)
@@ -85,7 +84,7 @@ def attention_map(coefs, src_labels, tgt_labels):
 
 def main():
     args = docopt(__doc__)
-    data_dir = args.get('--data-dir') or 'dataset/processed_data/'
+    data_dir = args.get('--data-dir') or 'dataset/processed_data/no-ast'
     train_data = args.get('--training-data') or "graphs-func-doc-train.json"
     valid_data = args.get('--validation-data') or "graphs-func-doc-valid.json"
     test_data = args.get('--testing-data') or "graphs-func-doc-test.json"
@@ -94,6 +93,7 @@ def main():
 
     train_data = load_data(data_dir, train_data)
     valid_data = load_data(data_dir, valid_data)
+    test_data = load_data(data_dir, test_data)
 
     if args.get('--no-train'):
         CONFIG['num_epochs'] = 0

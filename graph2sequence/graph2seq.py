@@ -44,12 +44,12 @@ class Graph2Seq(BaseEmbeddingsGNN):
         params.update({
             'learning_rate': 0.001,
             'num_timesteps': 4,
-            'hidden_size': 128,
+            'hidden_size': 256,
             'tie_fwd_bkwd': False,
             'use_edge_bias': True,
 
             'decoder_layers' : 1,
-            'decoder_rnn_cell': 'GRU',                  # (num_classes)
+            'decoder_rnn_cell': 'LSTM',                  # (num_classes)
             'decoder_num_units': 512,                   # doesn't work yet
             'decoder_rnn_activation': 'tanh',
             'decoder_cells_dropout_keep_prob': 0.9,
@@ -375,7 +375,7 @@ class Graph2Seq(BaseEmbeddingsGNN):
 
             train_helper = tf.contrib.seq2seq.ScheduledEmbeddingTrainingHelper(
                 inputs=decoder_emb_inp,
-                sampling_probability=0.5, 
+                sampling_probability=0.1, 
                 sequence_length=self.placeholders['sequence_lens'],
                 embedding=tf.transpose(self.projection_weights),
                 time_major=False)
@@ -429,10 +429,8 @@ class Graph2Seq(BaseEmbeddingsGNN):
                                                                     logits=computed_logits)
 
 
-        normalized_crossent = (tf.reduce_sum(crossent * self.placeholders['target_mask'][:, :batch_max_len], axis=1) / 
-                               tf.cast(self.placeholders['sequence_lens'], tf.float32))
-        return (tf.reduce_sum(normalized_crossent) / 
-                tf.cast(self.placeholders['num_graphs'], tf.float32) )
+        return (tf.reduce_sum(crossent * self.placeholders['target_mask'][:, :batch_max_len]) / 
+                               tf.cast(self.placeholders['num_graphs'], tf.float32))
 
 
     def get_validation_ops(self, computed_logits, _ ):

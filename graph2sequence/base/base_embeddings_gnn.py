@@ -65,14 +65,15 @@ class BaseEmbeddingsGNN(BaseGNN):
         else: 
             if cell_type == 'gru':
                 create_raw_cell = lambda: tf.contrib.rnn.GRUCell(h_dim, activation=activation_fun)
-            elif cell_type == 'lstm' and activation_name == 'tanh':
-                create_raw_cell = lambda: tf.nn.rnn_cell.LSTMCell(h_dim, activation=activation_fun)
-
-            create_cell = lambda: tf.nn.rnn_cell.DropoutWrapper(create_raw_cell(),
-                                                                output_keep_prob=dropout_keep_prob,
-                                                                state_keep_prob=dropout_keep_prob,
-                                                                variational_recurrent=True,
-                                                                dtype=tf.float32)
+                create_cell = lambda: tf.nn.rnn_cell.DropoutWrapper(create_raw_cell(),
+                                                                    output_keep_prob=dropout_keep_prob,
+                                                                    state_keep_prob=dropout_keep_prob,
+                                                                    variational_recurrent=True,
+                                                                    dtype=tf.float32)
+            elif cell_type == 'lstm':
+                create_cell = lambda: tf.contrib.rnn.LayerNormBasicLSTMCell(h_dim,
+                                                                            activation=activation_fun,
+                                                                            dropout_keep_prob=dropout_keep_prob)
 
             if num_layers > 1:
                 cells = [create_cell() for _ in range(num_layers)]

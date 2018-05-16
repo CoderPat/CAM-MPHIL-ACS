@@ -136,11 +136,11 @@ if __name__ == "__main__":
         input_vectorizer = args.get('--load-input-vect') 
         save_input_vect = args.get('--save-input-vect') or "../processed_data/input-" + task_type + "-vect.pickle"
         output_vectorizer = args.get('--load-output-vect')
-        save_output_vect = args.get('--save-output-vect') or "../processed_data/input-" + task_type + "-vect.pickle"
+        save_output_vect = args.get('--save-output-vect') or "../processed_data/output-" + task_type + "-vect.pickle"
     else:
         input_vectorizer = args.get('--load-input-vect') or "../processed_data/input-" + task_type + "-vect.pickle"
         save_input_vect = args.get('--save-input-vect') 
-        output_vectorizer = args.get('--load-output-vect') or "../processed_data/input-" + task_type + "-vect.pickle"
+        output_vectorizer = args.get('--load-output-vect') or "../processed_data/output-" + task_type + "-vect.pickle"
         save_output_vect = args.get('--save-output-vect') 
 
     output_file = args.get('--output_file') or "../processed_data/graphs-" + task_type + "-" + split + ".json"

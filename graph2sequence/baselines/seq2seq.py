@@ -18,16 +18,19 @@ class Seq2Seq(object):
         return {
             'num_epochs': 3000,
             'patience': 25,
-            'learning_rate': 0.0005,
+            'learning_rate': 0.001,
             'clamp_gradient_norm': 5.0,
 
             'embedding_size': 512,
             'state_size': 512,
-            'encoder_layers': 2,
-            'decoder_layers': 2,
+            'encoder_layers': 1,
+            'decoder_layers': 1,
 
             'random_seed': 0,
             'max_output_len': 30,
+
+            'bleu': [1, 4],
+            'f1': True,
 
             'input_shape': None,        # (max_num_vertices, num_edges_types, annotation_size)
             'output_shape': None        # for subclasses to decide
@@ -173,7 +176,7 @@ class Seq2Seq(object):
         self.projection_layer = tf.layers.Dense(
             self.tgt_vocab_size+3, use_bias=False)
 
-        cell = lambda: tf.nn.rnn_cell.BasicLSTMCell(self.params['state_size'])
+        cell = lambda: tf.contrib.rnn.LayerNormBasicLSTMCell(self.params['state_size'])
         decoder_cell = tf.contrib.rnn.MultiRNNCell([cell() for _ in range(self.params['decoder_layers'])])
 
         attention_mechanism = tf.contrib.seq2seq.LuongAttention(
@@ -337,7 +340,7 @@ class Seq2Seq(object):
                 num_graphs += 1
                 num_graphs_in_batch += 1
                 node_offset += num_nodes_in_graph
-
+            
             batch_node_features = batch_node_features.tocoo()
             indices = np.array([[row] for row in batch_node_features.row])
 
@@ -375,7 +378,7 @@ class Seq2Seq(object):
             elif mode == ModeKeys.EVAL:
                 fetch_list = [self.train_loss, self.translations]
             elif mode == ModeKeys.INFER:
-                fetch_list = self.translations
+                fetch_list = [self.translations,]
 
             result = self.sess.run(fetch_list, feed_dict=batch_data)
 
@@ -569,6 +572,17 @@ class Seq2Seq(object):
             restore_ops.append(tf.variables_initializer(variables_to_initialize))
             self.sess.run(restore_ops)
 
+    def infer(self, input_data):
+        input_data = self.process_data(input_data, mode=ModeKeys.INFER)
+
+        with self.graph.as_default():
+            infer_results = self.run_epoch(None, input_data, ModeKeys.INFER)
+
+        return self.process_inference(infer_results)
+
+    def process_inference(self, infer_results, coefs=False):
+        sampled_ids = [sampled_sentence.tolist() for result in infer_results for sampled_sentence in result[0]]
+        return self.get_translations(sampled_ids)
 
 
             

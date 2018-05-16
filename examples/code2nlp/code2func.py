@@ -3,17 +3,16 @@ Usage:
     code2func.py [options]
 
 Options:
-    -h --help                   Show this screen.
-    --log_dir DIR               Log dir name.
-    --data_dir DIR              Data dir name.
-    --restore FILE              File to restore weights from.
-    --no-train                  Sets epochs to zero (only for already trained models)
-    --freeze-graph-model        Freeze weights of graph model components.
-    --training-data FILE        Location of the training data
-    --validation-data FILE      Location of the training data
-    --print-example FILE  	Print random examples using the a vocabulary file
-    --print-alignment FILE   	Print random examples using the a vocabulary file
-
+    -h --help                       Show this screen.
+    --log_dir DIR                   Log dir name.
+    --data_dir DIR                  Data dir name.
+    --restore FILE                  File to restore weights from.
+    --no-train                      Sets epochs to zero (only for already trained models)
+    --freeze-graph-model            Freeze weights of graph model components.
+    --training-data FILE            Location of the training data
+    --validation-data FILE          Location of the validation data
+    --testing-data FILE             Location of the test data
+    --save-alignments FILE,FILE     Locations of input and output vectorizers       
 """
 
 from typing import List, Tuple, Dict, Sequence, Any
@@ -71,7 +70,7 @@ def load_data(data_dir, file_name, restrict = None):
     print("Using %d out of %d" % (len(new_data), len(raw_data)))
     return new_data
 
-def attention_map(coefs, src_labels, tgt_labels):
+def save_attention_map(coefs, src_labels, tgt_labels, path):
     coefs = coefs[:len(src_labels), :len(tgt_labels)]
     print(coefs)
     fig, ax = plt.subplots()
@@ -84,7 +83,7 @@ def attention_map(coefs, src_labels, tgt_labels):
     ax.invert_yaxis()
     ax.xaxis.tick_top()
     ax.grid(False)
-    plt.show()
+    plt.savefig(path)
 
 
 def main():
@@ -93,8 +92,7 @@ def main():
     train_data = args.get('--training-data') or "graphs-body-name-train.json"
     valid_data = args.get('--validation-data') or "graphs-body-name-valid.json"
     test_data = args.get('--testing-data') or "graphs-body-name-test.json"
-    input_vect = args.get('--print-alignment')
-    output_vect = args.get('--print-example')
+    vects = args.get('--save-alignments')
 
     train_data = load_data(data_dir, train_data)
     valid_data = load_data(data_dir, valid_data)
@@ -110,31 +108,23 @@ def main():
         model.train(train_data, valid_data)
         model.evaluate(test_data)
         
-        if output_vect is not None:
+        if vects is not None:
+            input_vect, output_vect = vects.split(',') 
+
             print("Loading output vectorizer")
             with open(output_vect, 'rb') as f:
                 output_vect = pickle.load(f)
-            
-            predicted_tokens, coefs = model.infer(valid_data, alignment_history=True)
-            predicted_names = output_vect.devectorize(model.infer(valid_data), indices_only=True)
-            true_names = output_vect.devectorize([g['output'] for g in valid_data], indices_only=True)
-            if input_vect is not None:
-                print("Loading input vectorizer")
-                with open(input_vect, 'rb') as f:
-                    input_vect = pickle.load(f)
-                valid_labels = [input_vect.devectorize(g['node_features']) for g in valid_data]
 
-            
-            print("printing random examples, press 'q' \to exit")
-            while True:
-                random_example = random.randint(0, len(predicted_names)-1)
-                print("Predicted function name: %s" % "_".join(predicted_names[random_example]))
-                print("True function name: %s" % "_".join(true_names[random_example]))
-                if input_vect is not None:
-                    attention_map(coefs[random_example], valid_labels[random_example], predicted_names[random_example])
+            print("Loading input vectorizer")
+            with open(input_vect, 'rb') as f:
+                input_vect = pickle.load(f)
 
-                if (input() == 'q'):
-                    break
+            outputs, coefs = model.infer(test_data)
+            outputs = output_vect.devectorize(outputs, subtokens=False)
+            references = output_vect.devectorize([g['output'] for g in test_data], subtokens=False)
+
+            for i, (output, coef, reference) in enumerate(zip(output, coefs, references)):
+                save_attention_map(coef, reference, output, "attention_maps/attention_map_%d" % i)
     except:
         typ, value, tb = sys.exc_info()
         traceback.print_exc()

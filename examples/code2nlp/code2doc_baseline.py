@@ -3,16 +3,16 @@ Usage:
     code2doc_baseline.py [options]
 
 Options:
-    -h --help                Show this screen.
-    --log_dir DIR            Log dir name.
-    --data_dir DIR           Data dir name.
-    --restore FILE           File to restore weights from.
-    --no-train               Sets epochs to zero (only for already trained models)
-    --freeze-graph-model     Freeze weights of graph model components.
-    --training-data FILE     Location of the training data
-    --validation-data FILE   Location of the training data
-    --restrict_data <value>
-    --print-example FILE     Print random examples using the a vocabulary file
+    -h --help                       Show this screen.
+    --log_dir DIR                   Log dir name.
+    --data_dir DIR                  Data dir name.
+    --restore FILE                  File to restore weights from.
+    --no-train                      Sets epochs to zero (only for already trained models)
+    --freeze-graph-model            Freeze weights of graph model components.
+    --training-data FILE            Location of the training data
+    --validation-data FILE          Location of the validation data
+    --testing-data FILE             Location of the test data
+    --save-alignments FILE,FILE     Locations of input and output vectorizers       
 
 """
 
@@ -66,6 +66,21 @@ def load_data(data_dir, file_name, restrict = None):
         new_data.append(g)
 
     return new_data
+
+def attention_map(coefs, src_labels, tgt_labels):
+    coefs = coefs[:len(src_labels), :len(tgt_labels)]
+    print(coefs)
+    fig, ax = plt.subplots()
+    heatmap = ax.pcolor(coefs*255, cmap=plt.cm.gray, alpha=0.8)
+    ax.set_yticks(np.arange(coefs.shape[0]) + 0.5, minor=False)
+    ax.set_xticks(np.arange(coefs.shape[1]) + 0.5, minor=False)
+    ax.set_xticklabels(tgt_labels, minor=False)
+    ax.set_yticklabels(src_labels, minor=False)
+    plt.xticks(rotation=90)
+    ax.invert_yaxis()
+    ax.xaxis.tick_top()
+    ax.grid(False)
+    plt.savefig()
 
 
 def main():

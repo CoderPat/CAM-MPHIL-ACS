@@ -53,7 +53,7 @@ class Graph2Seq(BaseEmbeddingsGNN):
             'decoder_num_units': 512,                   # doesn't work yet
             'decoder_rnn_activation': 'tanh',
             'decoder_cells_dropout_keep_prob': 0.9,
-            'beam_width': 10,
+            'beam_width': 1,
 
             'attention': 'Bahdanau',
             'attention_scope': None,
@@ -393,7 +393,7 @@ class Graph2Seq(BaseEmbeddingsGNN):
             decoder_cell, initial_state = self.build_decoder_cell(graph_average, graph_embeddings, beam_tile=True)
 
             start_tokens = tf.fill([self.placeholders['num_graphs']], tf.cast(self.go_symbol, tf.int32))
-   
+
             infer_decoder = tf.contrib.seq2seq.BeamSearchDecoder(
                 cell=decoder_cell, 
                 embedding=tf.transpose(self.projection_weights),
@@ -409,6 +409,8 @@ class Graph2Seq(BaseEmbeddingsGNN):
 
             if self.params['attention'] is not None:
                 self.ops['alignment_history'] = self.create_attention_coefs(self.ops['final_context_state'])
+
+            train_outputs = tf.Print(train_outputs, [self.placeholders['num_graphs'], tf.shape(self.ops['alignment_history'] )])
 
         return train_outputs
 

@@ -3,16 +3,16 @@ Usage:
     code2doc.py [options]
 
 Options:
-    -h --help                Show this screen.
-    --log_dir DIR            Log dir name.
-    --data_dir DIR           Data dir name.
-    --restore FILE           File to restore weights from.
-    --no-train               Sets epochs to zero (only for already trained models)
-    --freeze-graph-model     Freeze weights of graph model components.
-    --training-data FILE     Location of the training data
-    --validation-data FILE   Location of the training data
-    --restrict_data <value>
-    --print-example FILE     Print random examples using the a vocabulary file
+    -h --help                       Show this screen.
+    --log_dir DIR                   Log dir name.
+    --data_dir DIR                  Data dir name.
+    --restore FILE                  File to restore weights from.
+    --no-train                      Sets epochs to zero (only for already trained models)
+    --freeze-graph-model            Freeze weights of graph model components.
+    --training-data FILE            Location of the training data
+    --validation-data FILE          Location of the validation data
+    --testing-data FILE             Location of the test data
+    --save-alignments FILE,FILE     Locations of input and output vectorizers       
 
 """
 
@@ -31,13 +31,13 @@ import pdb
 import pickle
 import random
 
-from graph2sequence.sequence_gnn import Graph2Seq
+from graph2sequence.graph2seq import Graph2Seq
 
 MAX_VERTICES_GRAPH = 1000
 MAX_OUTPUT_LEN = 20
 
 CONFIG = {
-    'batch_size': 100000,
+    'batch_size': 2000,
     'graph_state_dropout_keep_prob': 0.8,
     'decoder_cells_dropout_keep_prob': 0.9,    
     'learning_rate': 0.002,
@@ -63,9 +63,27 @@ def load_data(data_dir, file_name, restrict = None):
         if shape[0] >= MAX_VERTICES_GRAPH or len(g["output"]) >= MAX_OUTPUT_LEN:
             continue
 
+        if len(new_data) >= 20000:
+            break
+
         new_data.append(g)
 
     return new_data
+
+def save_attention_map(coefs, src_labels, tgt_labels, path):
+    coefs = coefs[:len(src_labels), :len(tgt_labels)]
+    print(coefs)
+    fig, ax = plt.subplots()
+    heatmap = ax.pcolor(coefs*255, cmap=plt.cm.gray, alpha=0.8)
+    ax.set_yticks(np.arange(coefs.shape[0]) + 0.5, minor=False)
+    ax.set_xticks(np.arange(coefs.shape[1]) + 0.5, minor=False)
+    ax.set_xticklabels(tgt_labels, minor=False)
+    ax.set_yticklabels(src_labels, minor=False)
+    plt.xticks(rotation=90)
+    ax.invert_yaxis()
+    ax.xaxis.tick_top()
+    ax.grid(False)
+    plt.savefig(path)
 
 
 def main():
@@ -74,11 +92,11 @@ def main():
     train_data = args.get('--training-data') or "graphs-func-doc-train.json"
     valid_data = args.get('--validation-data') or "graphs-func-doc-valid.json"
     test_data = args.get('--testing-data') or "graphs-func-doc-test.json"
-    input_vect = args.get('--print-alignment')
-    output_vect = args.get('--print-example')
+    vects = args.get('--save-alignments')
 
     train_data = load_data(data_dir, train_data)
     valid_data = load_data(data_dir, valid_data)
+    test_data = load_data(data_dir, test_data)
 
     if args.get('--no-train'):
         CONFIG['num_epochs'] = 0
@@ -90,21 +108,24 @@ def main():
         model.train(train_data, valid_data)
         model.evaluate(test_data)
 
-        if output_vect is not None:
+        if vects is not None:
+            input_vect, output_vect = vects.split(',') 
+
             print("Loading output vectorizer")
             with open(output_vect, 'rb') as f:
                 output_vect = pickle.load(f)
 
-            predicted_names = output_vect.devectorize(model.infer(valid_data), indices_only=True)
-            true_names = output_vect.devectorize([g['output'] for g in valid_data], indices_only=True)
+            print("Loading input vectorizer")
+            with open(input_vect, 'rb') as f:
+                input_vect = pickle.load(f)
 
-            print("printing random examples, press 'q' \to exit")
-            while True:
-                random_example = random.randint(0, len(predicted_names)-1)
-                print("Predicted function doc: %s" % " ".join(predicted_names[random_example]))
-                print("True function doc: %s" % " ".join(true_names[random_example]))
-                if (input() == 'q'):
-                    break
+            outputs, coefs = model.infer(test_data)
+            outputs = output_vect.devectorize(outputs, subtokens=False)
+            references = output_vect.devectorize([g['output'] for g in test_data], subtokens=False)
+
+            for i, (output, coef, reference) in enumerate(zip(output, coefs, references)):
+                save_attention_map(coef, reference, output, "attention_maps/attention_map_%d" % i)
+
     except:
         typ, value, tb = sys.exc_info()
         traceback.print_exc()

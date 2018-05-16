@@ -410,8 +410,6 @@ class Graph2Seq(BaseEmbeddingsGNN):
             if self.params['attention'] is not None:
                 self.ops['alignment_history'] = self.create_attention_coefs(self.ops['final_context_state'])
 
-            train_outputs = tf.Print(train_outputs, [self.placeholders['num_graphs'], tf.shape(self.ops['alignment_history'] )])
-
         return train_outputs
 
     def create_attention_coefs(self, final_context_state):

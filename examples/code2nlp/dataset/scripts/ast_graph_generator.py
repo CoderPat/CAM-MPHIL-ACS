@@ -88,6 +88,8 @@ class AstGraphGenerator(NodeVisitor):
         self.node_type = {}
         self.representations = []
 
+        self.terminal_path = []
+
         self.parent = None                #For child edges
         self.previous_token = None        #For next_token edges
         self.last_lexical = {}            #For last_lexical edges
@@ -120,6 +122,11 @@ class AstGraphGenerator(NodeVisitor):
     def __create_node(self, label, node_type):
         self.node_label[self.node_id] = label
         self.node_type[self.node_id] = node_type
+
+        if node_type == NODE_TYPE['terminal'] or node_type == NODE_TYPE['identifier'] \
+           and self.node_id not in self.terminal_path:
+            self.terminal_path.append(self.node_id)
+
         self.node_id += 1
         return self.node_id - 1
 
@@ -502,11 +509,12 @@ class AstGraphGenerator(NodeVisitor):
     def visit_TryExcept(self, node):
         gparent = self.parent
         self.non_terminal(node)
-        
-        
+
         self.terminal('try')
         self.terminal(':')
         self.body(node.body)
+
+
         for handler in node.handlers:
             self.visit(handler)
         self.parent = gparent
@@ -514,7 +522,7 @@ class AstGraphGenerator(NodeVisitor):
     def visit_TryFinally(self, node):
         gparent = self.parent
         self.non_terminal(node)
-        
+
         self.terminal('try')
         self.terminal(':')
         self.body(node.body)
@@ -540,6 +548,7 @@ class AstGraphGenerator(NodeVisitor):
 
     def visit_Return(self, node):
         gparent = self.parent
+
         self.non_terminal(node)
         
         if node.value:

@@ -6,6 +6,8 @@ Also performs train-valid-test splitting
 """
 import random 
 
+CLEAN_PARAMS = True
+
 DECL_FILE = "../raw_data/V2/parallel/parallel_decl"
 BODIES_FILE = "../raw_data/V2/parallel/parallel_bodies"
 DESC_FILE = "../raw_data/V2/parallel/parallel_desc"
@@ -18,7 +20,7 @@ CLEANED_DESC_FILE = "../cleaned_data/parallel_desc"
 TEST_SIZE = 2000
 VALID_SIZE = 2000
 
-#A few tags that normally represent begging of argument descriptions or other information
+#A few tags that normally represent beginning of argument descriptions or other information
 parameter_taggers = [":param", "Args:", "Atributes:", "Reference:"]
 
 def partition(iter, sizes):
@@ -32,8 +34,7 @@ def partition(iter, sizes):
     
     return partitions
     
-
-if __name__ == "__main__":
+def main():   
     with open(DECL_FILE, 'r') as f:
         decls = f.readlines()
     with open(BODIES_FILE, 'r') as f:
@@ -52,7 +53,7 @@ if __name__ == "__main__":
                 new_decls.append(decl)
 
                 for tag in parameter_taggers: 
-                    if tag in desc:
+                    if tag in desc and CLEAN_PARAMS:
                         desc = desc[:desc.find(tag)] + '\n'
 
                 new_descs.append(desc)
@@ -78,8 +79,7 @@ if __name__ == "__main__":
             f.writelines([declbodies[j] for j in splits[i]])
         with open(CLEANED_DESC_FILE + "." + split, 'w') as f:
             f.writelines([new_descs[j] for j in splits[i]])
-    
 
-    
 
-        
+if __name__ == "__main__":
+    main()

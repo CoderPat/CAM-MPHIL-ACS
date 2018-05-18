@@ -18,7 +18,8 @@ EDGE_TYPE = {
     'last_lexical': 2,
     'last_use': 3,
     'last_write': 4,
-    'computed_from': 5
+    'computed_from': 5,
+    'return_to': 6,
 }
 
 NODE_TYPE = {
@@ -94,6 +95,11 @@ class AstGraphGenerator(NodeVisitor):
         self.previous_token = None        #For next_token edges
         self.last_lexical = {}            #For last_lexical edges
 
+        self.current_function = None      #For return_to edges
+        self.is_return = False
+
+        self.assign_context = None
+
         self.is_revisit = False
         self.lvalue = False
         self.last_access = defaultdict(lambda: [set(), set()])
@@ -116,14 +122,19 @@ class AstGraphGenerator(NodeVisitor):
         if edge_type == 'last_write' and not self.syntactic_only:
             for use in self.last_access[label][1]:
                 self.graph[(nid, use)].add(EDGE_TYPE['last_write'])
-
+        if edge_type == 'return_to' and not self.syntactic_only \
+                                        and self.is_return:
+            self.graph[(nid, self.current_function)].add(EDGE_TYPE['return_to'])
+        if edge_type == 'computed_from' and self.lvalue:
+            for other in self.assign_context:
+                self.graph[(nid,other)].add(EDGE_TYPE['computed_from'])
 
        
     def __create_node(self, label, node_type):
         self.node_label[self.node_id] = label
         self.node_type[self.node_id] = node_type
 
-        if node_type == NODE_TYPE['terminal'] or node_type == NODE_TYPE['identifier'] \
+        if (node_type == NODE_TYPE['terminal'] or node_type == NODE_TYPE['identifier']) \
            and self.node_id not in self.terminal_path:
             self.terminal_path.append(self.node_id)
 
@@ -177,6 +188,7 @@ class AstGraphGenerator(NodeVisitor):
             
             self.__add_edge(nid, edge_type='child')
             self.__add_edge(nid, edge_type='next_token')
+            self.__add_edge(nid, edge_type='return_to')
 
             if not self.is_revisit:
                 self.previous_token = nid
@@ -200,6 +212,7 @@ class AstGraphGenerator(NodeVisitor):
 
         self.__add_edge(nid, label=label, edge_type='last_use')
         self.__add_edge(nid, label=label, edge_type='last_write')
+        self.__add_edge(nid, label=label, edge_type='computed_from')
 
         if not self.is_revisit:
             self.previous_token = nid
@@ -208,6 +221,9 @@ class AstGraphGenerator(NodeVisitor):
             self.last_access[label][0] = {nid}
             if self.lvalue:
                 self.last_access[label][1] = {nid}
+
+        if self.assign_context is not None and not self.lvalue:
+            self.assign_context.add(nid)
 
     # --- Visitors ---
 
@@ -266,18 +282,19 @@ class AstGraphGenerator(NodeVisitor):
         self.syntactic_only = True
         for idx, target in enumerate(node.targets):
             if idx:
-                self.terminal(', ')
+                self.terminal('=')
             self.visit(target)
         self.syntactic_only = False
 
         self.terminal('=')
+        self.assign_context = set()
         self.visit(node.value)
 
         self.lvalue = True
         for target in node.targets:
             lside_id = self.revisit(target, root=lside_id) + (1 if not self.identifier_only else 0)
         self.lvalue = False
-
+        self.assign_context = None
         self.parent = gparent
 
     def visit_AugAssign(self, node):
@@ -326,6 +343,8 @@ class AstGraphGenerator(NodeVisitor):
 
     def visit_FunctionDef(self, node):
         gparent = self.parent
+        top_function = self.current_function
+        self.current_function = self.node_id
         self.non_terminal(node)
 
         self.decorators(node)
@@ -335,7 +354,10 @@ class AstGraphGenerator(NodeVisitor):
         self.signature(node.args)
         self.terminal(')')
         self.terminal(':')
+
+
         self.body(node.body)
+        self.current_function = top_function
         
         self.parent = gparent
 
@@ -552,10 +574,15 @@ class AstGraphGenerator(NodeVisitor):
         self.non_terminal(node)
         
         if node.value:
-            self.terminal('return ')
-            self.visit(node.value)
-        else:
+            self.is_return = True
             self.terminal('return')
+            self.is_return = False
+            self.visit(node.value)
+
+        else:
+            self.is_return = True
+            self.terminal('return')
+            self.is_return = False
         self.parent = gparent
 
     def visit_Break(self, node):
@@ -887,3 +914,10 @@ class AstGraphGenerator(NodeVisitor):
         self.terminal(':')
         self.body(node.body)
         self.parent = gparent
+
+if __name__ == "__main__":
+    example = """
+x = 0
+y = f(x)
+"""
+    plot_code_graph(example)

@@ -1,11 +1,11 @@
 """
 Usage:
-    code2doc.py [options]
+    code2func.py [options]
 
 Options:
     -h --help                       Show this screen.
     --log_dir DIR                   Log dir name.
-    --data-dir DIR                  Data dir name.
+    --data_dir DIR                  Data dir name.
     --restore FILE                  File to restore weights from.
     --no-train                      Sets epochs to zero (only for already trained models)
     --freeze-graph-model            Freeze weights of graph model components.
@@ -13,7 +13,6 @@ Options:
     --validation-data FILE          Location of the validation data
     --testing-data FILE             Location of the test data
     --save-alignments FILE,FILE     Locations of input and output vectorizers       
-
 """
 
 from typing import List, Tuple, Dict, Sequence, Any
@@ -21,25 +20,28 @@ from typing import List, Tuple, Dict, Sequence, Any
 from docopt import docopt
 from collections import defaultdict
 from scipy.sparse import csr_matrix
+import pickle
+import matplotlib
+import matplotlib.pyplot as plt
 
 import numpy as np
 
+import random
 import os
 import json
 import sys, traceback
 import pdb
-import pickle
-import random
 
 from graph2sequence.seqgraph2seq import Seqgraph2Seq
 
+from graph2sequence.base.utils import compute_bleu, compute_f1
+
 MAX_VERTICES_GRAPH = 700
-MAX_OUTPUT_LEN = 100
 
 CONFIG = {
     'batch_size': 20000,
-    'graph_state_dropout_keep_prob': 0.8,
-    'decoder_cells_dropout_keep_prob': 0.9,    
+    'graph_state_dropout_keep_prob': 0.7,
+    'decoder_cells_dropout_keep_prob': 0.9,
     'learning_rate': 0.001,
     'layer_timesteps': [2, 2, 2, 2],
     'attention_scope': None,
@@ -51,10 +53,10 @@ def load_data(data_dir, file_name, restrict = None):
 
     print("Loading data from %s" % full_path)
     with open(full_path, 'r') as f:
-        data = json.load(f)
+        raw_data = json.load(f)
 
     new_data = []
-    for d in data:
+    for d in raw_data:
         g = {}
         g["graph"] = d["graph"]
         (data, indices, indptr, shape) = d["node_features"]
@@ -63,11 +65,13 @@ def load_data(data_dir, file_name, restrict = None):
         g["output"] = np.array(d["output_features"])
         g["primary_path"] = np.array(d["primary_path"])
 
-        if shape[0] >= MAX_VERTICES_GRAPH or len(g["output"]) >= MAX_OUTPUT_LEN:
+
+        if shape[0] > MAX_VERTICES_GRAPH or len(g["output"]) == 0:
             continue
 
         new_data.append(g)
 
+    print("Using %d out of %d" % (len(new_data), len(raw_data)))
     return new_data
 
 def save_attention_map(coefs, src_labels, tgt_labels, path):
@@ -89,9 +93,9 @@ def save_attention_map(coefs, src_labels, tgt_labels, path):
 def main():
     args = docopt(__doc__)
     data_dir = args.get('--data-dir') or 'dataset/processed_data/'
-    train_data = args.get('--training-data') or "graphs-func-doc-train.json"
-    valid_data = args.get('--validation-data') or "graphs-func-doc-valid.json"
-    test_data = args.get('--testing-data') or "graphs-func-doc-test.json"
+    train_data = args.get('--training-data') or "graphs-body-name-train.json"
+    valid_data = args.get('--validation-data') or "graphs-body-name-valid.json"
+    test_data = args.get('--testing-data') or "graphs-body-name-test.json"
     vects = args.get('--save-alignments')
 
     train_data = load_data(data_dir, train_data)
@@ -100,14 +104,14 @@ def main():
 
     if args.get('--no-train'):
         CONFIG['num_epochs'] = 0
-
-    args['--config'] = json.dumps(CONFIG)
+        
+    args['--config'] =  json.dumps(CONFIG)
 
     try:
         model = Seqgraph2Seq(args)
         model.train(train_data, valid_data)
         model.evaluate(test_data)
-
+        
         if vects is not None:
             input_vect, output_vect = vects.split(',') 
 
@@ -125,7 +129,6 @@ def main():
 
             for i, (output, coef, reference) in enumerate(zip(output, coefs, references)):
                 save_attention_map(coef, reference, output, "attention_maps/attention_map_%d" % i)
-
     except:
         typ, value, tb = sys.exc_info()
         traceback.print_exc()

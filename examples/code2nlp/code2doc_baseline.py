@@ -37,7 +37,7 @@ MAX_VERTICES_GRAPH = 500
 MAX_OUTPUT_LEN = 100
 
 CONFIG = {
-    'batch_size': 50000,
+    'batch_size': 25000,
     'learning_rate': 0.001,
     'graph_state_dropout_keep_prob': 1.,
     'decoder_cells_dropout_keep_prob': 1.,

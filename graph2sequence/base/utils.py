@@ -17,11 +17,20 @@ def glorot_init(shape):
     initialization_range = np.sqrt(6.0 / (shape[-2] + shape[-1]))
     return np.random.uniform(low=-initialization_range, high=initialization_range, size=shape).astype(np.float32)
 
-# ---- METRICS ----- 
+# ---- METRICS -----
+
+def compute_acc(reference_corpus, sampled_sentences, unk_token=0):
+    """
+    """
+    total_acc = 0
+    for reference, sampled in zip(reference_corpus, sampled_sentences):
+        if unk_token not in sampled and reference == sampled:
+            total_acc += 1
+    return total_acc/len(sampled_sentences)
 
 def compute_bleu(references, translations, max_order=4):
     """
-    Computes BLEU for a evaluation set of translations
+    Computes BLEU for a evaluation set of translations with only one reference
     Based on https://github.com/tensorflow/nmt/blob/master/nmt/scripts/bleu.py
     """
 

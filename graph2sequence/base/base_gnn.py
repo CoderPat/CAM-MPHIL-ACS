@@ -295,10 +295,10 @@ class BaseGNN(object):
         test_loss, test_results, test_speed = self.run_epoch("Testing... ", 
                                                               test_data, ModeKeys.EVAL)
 
-        format_string, test_log = self.get_log(valid_loss, valid_speed, valid_results,
+        format_string, test_log = self.get_log(test_loss, test_speed, test_results,
                                                ModeKeys.EVAL)
 
-        print(("\r\x1b[K Test: " + format_string) % valid_log)
+        print(("\r\x1b[K Test: " + format_string) % test_log)
 
 
     def save_model(self, path: str) -> None:
@@ -326,11 +326,11 @@ class BaseGNN(object):
             data_to_load = pickle.load(in_file)
 
         # Assert that we got the same model configuration
-        assert len(self.params) == len(data_to_load['params'])
+        """assert len(self.params) == len(data_to_load['params'])
         for (par, par_value) in self.params.items():
             # Fine to have different task_ids or num epochs:
             if par not in ['task_ids', 'num_epochs', 'batch_size']:
-                assert par_value == data_to_load['params'][par]
+                assert par_value == data_to_load['params'][par]"""
 
         variables_to_initialize = []
         with tf.name_scope("restore"):

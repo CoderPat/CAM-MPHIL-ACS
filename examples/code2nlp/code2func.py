@@ -32,19 +32,21 @@ import json
 import sys, traceback
 import pdb
 
-from graph2sequence.sequence_gnn import Graph2Seq
+from graph2sequence.graph2seq import Graph2Seq
 
 from graph2sequence.base.utils import compute_bleu, compute_f1
 
-MAX_VERTICES_IN_GRAPH = 1000
+MAX_VERTICES_GRAPH = 700
 
 CONFIG = {
-    'batch_size': 100000,
+    'batch_size': 50000,
     'graph_state_dropout_keep_prob': 0.7,
     'decoder_cells_dropout_keep_prob': 0.9,
+    'learning_rate': 0.001,
+    'layer_timesteps': [2, 2, 2, 2],
+    'attention_scope': None,
+    'random_seed' : None,
 }
-
-matplotlib.use('GTKAgg')
 
 def load_data(data_dir, file_name, restrict = None):
     full_path = os.path.join(data_dir, file_name)
@@ -58,13 +60,13 @@ def load_data(data_dir, file_name, restrict = None):
         g = {}
         g["graph"] = d["graph"]
         (data, indices, indptr, shape) = d["node_features"]
-
-        if shape[0] >= MAX_VERTICES_IN_GRAPH:
-            continue 
-
         g["node_types"] = np.array(d["node_types"])
         g["node_features"] = csr_matrix((data, indices, indptr), shape)
         g["output"] = np.array(d["output_features"])
+
+        if shape[0] > MAX_VERTICES_GRAPH or len(g["output"]) == 0:
+            continue
+
         new_data.append(g)
 
     print("Using %d out of %d" % (len(new_data), len(raw_data)))

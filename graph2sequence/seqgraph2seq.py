@@ -83,6 +83,7 @@ class Seqgraph2Seq(BaseEmbeddingsGNN):
         super().prepare_specific_graph_model()
 
     def build_path_rnn(self, path_embeddings, path_lens):
+
         fwd_encoder_cell = tf.contrib.rnn.GRUCell(self.params['hidden_size']/2)
         bwd_encoder_cell = tf.contrib.rnn.GRUCell(self.params['hidden_size']/2)
 
@@ -110,7 +111,7 @@ class Seqgraph2Seq(BaseEmbeddingsGNN):
                     - tf.shape(cur_node_states)[0])
         
         cur_node_states = tf.concat([cur_node_states, tf.zeros((pad_len, h_dim))], axis=0)
-
+ 
         pad_embbeddings = tf.concat([tf.zeros((1, self.params['hidden_size'])), 
                                      cur_node_states], axis=0)
 
@@ -122,7 +123,6 @@ class Seqgraph2Seq(BaseEmbeddingsGNN):
         flat_indices = tf.reshape(self.placeholders['path_indexes'], (num_graphs * self.max_path_size,))
 
         cur_node_states = scatter_update_tensor(pad_embbeddings, flat_indices, flat_representation)[1:]
-
 
         for (layer_idx, num_timesteps) in enumerate(self.params['layer_timesteps']):
             with tf.variable_scope('gnn_layer_%i' % layer_idx):

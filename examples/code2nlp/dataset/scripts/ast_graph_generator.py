@@ -123,9 +123,11 @@ class AstGraphGenerator(NodeVisitor):
             for use in self.last_access[label][1]:
                 self.graph[(nid, use)].add(EDGE_TYPE['last_write'])
         if edge_type == 'return_to' and not self.syntactic_only \
-                                        and self.is_return:
+                                        and self.is_return and self.use_ast\
+                                        and self.current_function is not None:
             self.graph[(nid, self.current_function)].add(EDGE_TYPE['return_to'])
-        if edge_type == 'computed_from' and self.lvalue:
+        if edge_type == 'computed_from' and self.lvalue\
+                                        and self.assign_context is not None:
             for other in self.assign_context:
                 self.graph[(nid,other)].add(EDGE_TYPE['computed_from'])
 
@@ -307,11 +309,14 @@ class AstGraphGenerator(NodeVisitor):
         self.syntactic_only = False
 
         self.terminal(BINOP_SYMBOLS[type(node.op)] + '=')
+        self.assign_context = set()
+
         self.visit(node.value)
 
         self.lvalue = True
         self.revisit(node.target, root=lside_id)
         self.lvalue = False
+        self.assign_context = None
         self.parent = gparent
 
     def visit_ImportFrom(self, node):
@@ -792,10 +797,10 @@ class AstGraphGenerator(NodeVisitor):
     def visit_ExtSlice(self, node):
         gparent = self.parent
         self.non_terminal(node)
-        for idx, item in node.dims:
-            if idx:
-                self.terminal(',')
-            self.visit(item)
+        for i in range(0, len(node.dims)):
+            if i > 0:
+                self.terminal(', ')
+            self.visit(node.dims[i])
         self.parent = gparent
 
     def visit_Yield(self, node):

@@ -5,7 +5,7 @@ Usage:
 Options:
     -h --help                       Show this screen.
     --log_dir DIR                   Log dir name.
-    --data_dir DIR                  Data dir name.
+    --data-dir DIR                  Data dir name.
     --restore FILE                  File to restore weights from.
     --no-train                      Sets epochs to zero (only for already trained models)
     --freeze-graph-model            Freeze weights of graph model components.
@@ -37,7 +37,7 @@ MAX_VERTICES_GRAPH = 700
 MAX_OUTPUT_LEN = 100
 
 CONFIG = {
-    'batch_size': 25000,
+    'batch_size': 20000,
     'graph_state_dropout_keep_prob': 0.8,
     'decoder_cells_dropout_keep_prob': 0.9,    
     'learning_rate': 0.001,
@@ -45,6 +45,20 @@ CONFIG = {
     'attention_scope': None,
     'random_seed' : None,
 }
+
+def scope_labels(node_labels, node_types, scopes):
+    if scopes is None:
+        return node_labels
+    
+    scoped_all_labels = []
+    for labels, types in zip(node_labels, node_types):
+        scoped_labels = []
+        for label, t in zip(labels, types):
+            if (type(scopes) == list and t in scopes) or \
+               (type(scopes) == int and t == scopes):
+                scoped_labels.append(label)
+        scoped_all_labels.append(scoped_labels)
+    return scoped_all_labels
 
 def load_data(data_dir, file_name, restrict = None):
     full_path = os.path.join(data_dir, file_name)
@@ -65,28 +79,17 @@ def load_data(data_dir, file_name, restrict = None):
         if shape[0] >= MAX_VERTICES_GRAPH or len(g["output"]) >= MAX_OUTPUT_LEN:
             continue
 
-        if len(new_data) >= 20000:
-            break
-
         new_data.append(g)
 
     return new_data
 
-def save_attention_map(coefs, src_labels, tgt_labels, path):
-    coefs = coefs[:len(src_labels), :len(tgt_labels)]
-    print(coefs)
-    fig, ax = plt.subplots()
-    heatmap = ax.pcolor(coefs*255, cmap=plt.cm.gray, alpha=0.8)
-    ax.set_yticks(np.arange(coefs.shape[0]) + 0.5, minor=False)
-    ax.set_xticks(np.arange(coefs.shape[1]) + 0.5, minor=False)
-    ax.set_xticklabels(tgt_labels, minor=False)
-    ax.set_yticklabels(src_labels, minor=False)
-    plt.xticks(rotation=90)
-    ax.invert_yaxis()
-    ax.xaxis.tick_top()
-    ax.grid(False)
-    plt.savefig(path)
-
+def save_alignments(coefs, codes, outputs, references, path):
+    data = {"src_labels": codes,
+            "tgt_labels": outputs,
+            "references": references,
+            "coefs": coefs}
+    with open(path, "wb") as f:
+        pickle.dump(data,f, pickle.HIGHEST_PROTOCOL)
 
 def main():
     args = docopt(__doc__)
@@ -121,13 +124,12 @@ def main():
             with open(input_vect, 'rb') as f:
                 input_vect = pickle.load(f)
 
-            outputs, coefs = model.infer(test_data)
+            outputs, coefs = model.infer(test_data, alignment_history=True)
             outputs = output_vect.devectorize(outputs, subtokens=False)
+            codes = scope_labels(input_vect.devectorize([d["node_features"] for d in test_data], subtokens=True), [d["node_types"] for d in test_data], CONFIG['attention_scope'])
             references = output_vect.devectorize([g['output'] for g in test_data], subtokens=False)
 
-            for i, (output, coef, reference) in enumerate(zip(output, coefs, references)):
-                save_attention_map(coef, reference, output, "attention_maps/attention_map_%d" % i)
-
+            save_alignments(coefs, codes, outputs, references, "attention_maps.pickle")
     except:
         typ, value, tb = sys.exc_info()
         traceback.print_exc()

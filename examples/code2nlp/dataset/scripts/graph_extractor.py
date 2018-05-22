@@ -7,7 +7,7 @@ Options:
     -h --help                Show this screen.
     --code_data FILE         Prefix of the code data location 
     --label_data FILE        Prefix of the label data location 
-    --task_type TYPE         Type of the task [func-doc|body-decl]
+    --task_type TYPE         Type of the task [func-doc|body-name]
     --split TYPE             The split suffix of the code and label data [train|valid|test]
     --load-input-vect FILE   File to load a previously created vectorizer for encoding token labels.
     --save-input-vect FILE   File to save the created vectorizer for encoding token labels.
@@ -84,7 +84,7 @@ def process_data(inputs, outputs, task_type, input_vectorizer, output_vectorizer
 
             if task_type == "func-doc":
                 docs_words.append(doc_tokenizer(output))
-            if task_type == "body-decl":
+            if task_type == "body-name":
                 docs_words.append(decl_tokenizer(output))
 
             graph_node_labels.append([label.strip() for _, label in sorted(visitor.node_label.items())])
@@ -157,14 +157,15 @@ if __name__ == "__main__":
     inputs = [inp.replace("DCNL ", "\n").replace("DCSP ", "\t") for inp in inputs]
 
     #Unident body so it can be parsed
-    if task_type == 'body-decl':
-        inputs = ["\n".join([line[1:] for line in inp.split("\n")]) for inp in inputs]
+    if task_type == 'body-name':
+        inputs = ["\n".join([line[(1 if idx else 2):] for idx,line in enumerate(inp.split("\n"))]) for inp in inputs]
 
     if MOSES_TOKENIZER:
         labels = moses_tonenization(labels)
 
     labels = [label.replace("DCNL ", "\n").replace("DCSP ", "\t") for label in labels]
-
+    
+    assert len(labels) == len(inputs)
     if input_vectorizer is not None:
         print("Loading input vectorizer")
         with open(input_vectorizer, 'rb') as f:

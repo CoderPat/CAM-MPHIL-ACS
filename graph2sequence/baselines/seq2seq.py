@@ -10,7 +10,7 @@ from tensorflow.contrib.learn import ModeKeys
 
 from scipy.sparse import vstack, csr_matrix
 from ..base.utils import ThreadedIterator, SMALL_NUMBER
-from ..base.utils import glorot_init, MLP, compute_bleu, compute_f1
+from ..base.utils import glorot_init, MLP, compute_bleu, compute_f1,  compute_acc
 
 class Seq2Seq(object):
     @classmethod
@@ -31,6 +31,7 @@ class Seq2Seq(object):
 
             'bleu': [1, 4],
             'f1': True,
+            'acc': True,
 
             'input_shape': None,        # (max_num_vertices, num_edges_types, annotation_size)
             'output_shape': None        # for subclasses to decide
@@ -483,10 +484,10 @@ class Seq2Seq(object):
         test_loss, test_results, test_speed = self.run_epoch("Testing... ", 
                                                               test_data, ModeKeys.EVAL)
 
-        format_string, test_log = self.get_log(valid_loss, valid_speed, valid_results,
+        format_string, test_log = self.get_log(test_loss, test_speed, test_results,
                                                ModeKeys.EVAL)
 
-        print(("\r\x1b[K Test: " + format_string) % valid_log)
+        print(("\r\x1b[K Test: " + format_string) % test_log)
 
 
     def get_log(self, loss, speed, extra_results, mode):
@@ -511,6 +512,11 @@ class Seq2Seq(object):
                 f1 = compute_f1(reference_corpus, sampled_sentences, unk_token=0)
                 format_string += " | F1: " + "%.5f"
                 metrics = metrics + (f1, )
+
+            if self.params['acc']:
+                acc = compute_acc(reference_corpus, sampled_sentences, unk_token=0)
+                format_string += " | acc.: " + "%.5f"
+                metrics = metrics + (acc, )
 
             format_string += " | instances/sec: %.2f"
             metrics = metrics + (speed, )
@@ -549,11 +555,11 @@ class Seq2Seq(object):
             data_to_load = pickle.load(in_file)
 
         # Assert that we got the same model configuration
-        assert len(self.params) == len(data_to_load['params'])
+        """assert len(self.params) == len(data_to_load['params'])
         for (par, par_value) in self.params.items():
             # Fine to have different task_ids or num epochs:
             if par not in ['num_epochs', 'batch_size']:
-                assert par_value == data_to_load['params'][par]
+                assert par_value == data_to_load['params'][par]"""
 
         variables_to_initialize = []
         with tf.name_scope("restore"):

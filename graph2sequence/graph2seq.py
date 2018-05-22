@@ -26,7 +26,7 @@ import pdb
 from tensorflow.contrib.learn import ModeKeys
 from scipy.sparse import vstack, csr_matrix
 from .base.base_embeddings_gnn import BaseEmbeddingsGNN
-from .base.utils import glorot_init, MLP, compute_bleu, compute_f1
+from .base.utils import glorot_init, MLP, compute_bleu, compute_f1, compute_acc
 
 class Graph2Seq(BaseEmbeddingsGNN):
     """
@@ -55,11 +55,12 @@ class Graph2Seq(BaseEmbeddingsGNN):
             'decoder_cells_dropout_keep_prob': 0.9,
             'beam_width': 1,
 
-            'attention': 'Bahdanau',
+            'attention': 'Luong',
             'attention_scope': None,
 
             'bleu': [1, 4],
-            'f1': True
+            'f1': True,
+            'acc': True,
         })
         return params
 
@@ -117,6 +118,15 @@ class Graph2Seq(BaseEmbeddingsGNN):
                                      "num_incoming_edge_per_type": num_incoming_edge_per_type,
                                      "init": d["node_features"]})
 
+            if self.params['attention_scope'] is not None:
+                if isinstance(self.params['attention_scope'], int):
+                    scoped_indexes = np.where(d['node_types'] == self.params['attention_scope'])[0]
+                elif isinstance(self.params['attention_scope'], List):
+                    scoped_indexes = np.where(np.isin(d['node_types'], self.params['attention_scope']))[0]
+                processed_graphs[-1]['scoped_indexes'] = scoped_indexes
+
+
+
             if mode != ModeKeys.INFER:
                 sequence_len = d['output'].shape[0] + 1
                 pad_size = self.max_output_len - sequence_len
@@ -130,14 +140,6 @@ class Graph2Seq(BaseEmbeddingsGNN):
                                              "raw_targets": d['output'],
                                              "decoder_inputs": decoder_input,
                                              "sequence_len": sequence_len})
-
-                if self.params['attention_scope'] is not None:
-                    if isinstance(self.params['attention_scope'], int):
-                        scoped_indexes = np.where(d['node_types'] == self.params['attention_scope'])[0]
-                    elif isinstance(self.params['attention_scope'], List):
-                        scoped_indexes = np.where(np.isin(d['node_types'], self.params['attention_scope']))[0]
-                    processed_graphs[-1]['scoped_indexes'] = scoped_indexes
-                     
 
         return processed_graphs
 
@@ -459,6 +461,11 @@ class Graph2Seq(BaseEmbeddingsGNN):
                 f1 = compute_f1(reference_corpus, sampled_sentences, unk_token=0)
                 format_string += " | F1: " + "%.5f"
                 metrics = metrics + (f1, )
+            
+            if self.params['acc']:
+                acc = compute_acc(reference_corpus, sampled_sentences, unk_token=0)
+                format_string += " | acc.: " + "%.5f"
+                metrics = metrics + (acc, )
 
             format_string += " | instances/sec: %.2f"
             metrics = metrics + (speed, )

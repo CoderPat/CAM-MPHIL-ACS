@@ -263,7 +263,7 @@ class Graph2Seq(BaseEmbeddingsGNN):
             graph_mask = tf.SparseTensor(
                 indices=self.placeholders['graph_nodes_list'],
                 values=tf.ones_like(self.placeholders['graph_nodes_list'][:, 0], dtype=tf.float32),
-                dense_shape=[tf.cast(self.placeholders['num_graphs'], tf.int64) , num_nodes])  # [g x v]
+                dense_shape=[tf.cast(self.placeholders['num_graphs'], tf.int64) , tf.cast(tf.shape(last_h)[0], tf.int64)])  # [g x v]
                 
             graph_averages = (tf.sparse_tensor_dense_matmul(tf.cast(graph_mask, tf.float32), last_h)
                               / tf.reshape(tf.sparse_reduce_sum(graph_mask, 1), (-1, 1)))
@@ -291,7 +291,24 @@ class Graph2Seq(BaseEmbeddingsGNN):
         dropout = self.params['decoder_cells_dropout_keep_prob']
 
         decoder_cell = self.get_rnn_cell(cell_type, h_dim, activation_name, num_layers, 
-                                         self.placeholders['decoder_keep_prob'])         
+                                         self.placeholders['decoder_keep_prob'])
+
+        # Generate initial state for decoder in case it's an LSTM
+        initial_state = tf.nn.rnn_cell.LSTMStateTuple(graph_averages, graph_averages) if cell_type == 'lstm' \
+                        else graph_averages
+
+        # Pad initial state in case of multilayer decoder
+        if num_layers > 1:
+            if cell_type == 'lstm':
+                pad = [tf.nn.rnn_cell.LSTMStateTuple(tf.zeros((self.placeholders['num_graphs'],h_dim)),
+                                                     tf.zeros((self.placeholders['num_graphs'],h_dim)))
+                                            for _ in range(num_layers-1)]
+
+                initial_state = tuple([initial_state] + pad)
+            else:
+                pad = [tf.zeros((self.placeholders['num_graphs'],h_dim)) for _ in range(num_layers-1)]
+                initial_state = tuple([initial_state] + pad)
+
         
         #Wrap in attention
         if self.params['attention'] is not None:
@@ -331,24 +348,9 @@ class Graph2Seq(BaseEmbeddingsGNN):
                 attention_layer_size=h_dim,
                 alignment_history=True)
 
-        # Generate initial state for decoder in case it's an LSTM
-        initial_state = tf.nn.rnn_cell.LSTMStateTuple(graph_averages, graph_averages) if cell_type == 'lstm' \
-                        else graph_averages
-
-        # Pad initial state in case of multilayer decoder
-        if num_layers > 1:
-            if cell_type == 'lstm':
-                pad = [tf.nn.rnn_cell.LSTMStateTuple(tf.zeros((self.placeholders['num_graphs'],h_dim)), 
-                                                     tf.zeros((self.placeholders['num_graphs'],h_dim)))
-                                            for _ in range(num_layers-1)]
-
-                initial_state = tuple([initial_state] + pad)
-            else:
-                pad = [tf.zeros((self.placeholders['num_graphs'],h_dim)) for _ in range(num_layers-1)]
-                initial_state = tuple([initial_state] + pad)
-            
-        mult = self.params['beam_width'] if beam_tile else 1
-        initial_state = decoder_cell.zero_state(self.placeholders['num_graphs'] * mult, tf.float32).clone(cell_state=initial_state)   
+    
+            mult = self.params['beam_width'] if beam_tile else 1
+            initial_state = decoder_cell.zero_state(self.placeholders['num_graphs'] * mult, tf.float32).clone(cell_state=initial_state)   
 
         return decoder_cell, initial_state
 
@@ -409,8 +411,8 @@ class Graph2Seq(BaseEmbeddingsGNN):
                                                              maximum_iterations=2*self.max_output_len)
             self.ops['infer_output'], self.ops['final_context_state'], _ = decode_state
 
-            if self.params['attention'] is not None:
-                self.ops['alignment_history'] = self.create_attention_coefs(self.ops['final_context_state'])
+            self.ops['alignment_history'] = self.create_attention_coefs(self.ops['final_context_state']) if self.params['attention'] \
+                                                    else tf.no_op()
 
         return train_outputs
 
@@ -434,10 +436,10 @@ class Graph2Seq(BaseEmbeddingsGNN):
 
 
     def get_validation_ops(self, computed_logits, _ ):
-        return [self.ops['infer_output'].predicted_ids[:, :, 0]]
+        return [tf.transpose(self.ops['infer_output'].predicted_ids, (0,2,1))]
 
     def get_inference_ops(self, computed_logits):
-        return [self.ops['infer_output'].predicted_ids[:, :, 0], self.ops['alignment_history']]
+        return [tf.transpose(self.ops['infer_output'].predicted_ids, (0,2,1)), self.ops['alignment_history']]
 
     def get_log(self, loss, speed, extra_results, mode):
         if mode == ModeKeys.TRAIN:
@@ -447,7 +449,7 @@ class Graph2Seq(BaseEmbeddingsGNN):
             format_string, metrics = "loss: %.5f", (loss,)
 
             #Extract sampled sentences from results
-            sampled_ids = [sampled_sentence.tolist() for result in extra_results for sampled_sentence in result[0]]
+            sampled_ids = [sampled_sentence[0, :].tolist() for result in extra_results for sampled_sentence in result[0]]
 
             #Calculate BLEU and F1
             reference_corpus = [reference.tolist() for reference in self.raw_targets]
@@ -480,6 +482,10 @@ class Graph2Seq(BaseEmbeddingsGNN):
         for sampled_sentence in sampled_ids:
             if self.eos_symbol in sampled_sentence:
                 sampled_sentence = sampled_sentence[:sampled_sentence.index(self.eos_symbol)]
+            if self.pad_symbol in sampled_sentence:
+                sampled_sentence = sampled_sentence[:sampled_sentence.index(self.pad_symbol)]
+            if self.go_symbol in sampled_sentence:
+                sampled_sentence = sampled_sentence[:sampled_sentence.index(self.go_symbol)] 
             sentences.append(sampled_sentence)
         return sentences
 
@@ -494,7 +500,8 @@ class Graph2Seq(BaseEmbeddingsGNN):
     def process_inference(self, infer_results, coefs=False):
         coefs = [coef for result in infer_results for coef in result[1]]
         sampled_ids = [sampled_sentence.tolist() for result in infer_results for sampled_sentence in result[0]]
-        return self.get_translations(sampled_ids), coefs
+        
+        return [self.get_translations(ids) for ids in sampled_ids], coefs
 
 
 def main():

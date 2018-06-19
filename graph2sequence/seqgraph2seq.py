@@ -1,4 +1,4 @@
-#!/usr/bin/env/python
+	#!/usr/bin/env/python
 """
 Usage:
     sequence_gnn.py [options]
@@ -26,7 +26,7 @@ import pdb
 from tensorflow.contrib.learn import ModeKeys
 from scipy.sparse import vstack, csr_matrix
 from .base.base_embeddings_gnn import BaseEmbeddingsGNN
-from .base.utils import glorot_init, MLP, compute_bleu, compute_f1, SMALL_NUMBER
+from .base.utils import glorot_init, MLP, compute_bleu, compute_f1, compute_acc, SMALL_NUMBER
 
 def scatter_update_tensor(tensor, indices, updates):
     mask = tf.sparse_to_dense(indices, (tf.shape(tensor)[0],), 0, 1, validate_indices=False)
@@ -66,7 +66,8 @@ class Seqgraph2Seq(BaseEmbeddingsGNN):
             'attention_scope': None,
 
             'bleu': [1, 4],
-            'f1': True
+            'f1': True,
+            'acc': True
         })
         return params
 
@@ -563,6 +564,11 @@ class Seqgraph2Seq(BaseEmbeddingsGNN):
                 f1 = compute_f1(reference_corpus, sampled_sentences, unk_token=0)
                 format_string += " | F1: " + "%.5f"
                 metrics = metrics + (f1, )
+            if self.params['acc']:
+                acc = compute_acc(reference_corpus, sampled_sentences, unk_token=0)
+                format_string += " | acc.: " + "%.5f"
+                metrics = metrics + (acc, )
+
 
             format_string += " | instances/sec: %.2f"
             metrics = metrics + (speed, )

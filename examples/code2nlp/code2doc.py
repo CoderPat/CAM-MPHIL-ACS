@@ -44,6 +44,7 @@ CONFIG = {
     'layer_timesteps': [2, 2, 2, 2],
     'attention_scope': None,
     'random_seed' : None,
+    'beam_width': 1,
 }
 
 def scope_labels(node_labels, node_types, scopes):
@@ -78,7 +79,9 @@ def load_data(data_dir, file_name, restrict = None):
 
         if shape[0] >= MAX_VERTICES_GRAPH or len(g["output"]) >= MAX_OUTPUT_LEN:
             continue
-
+        
+        if isinstance(CONFIG['attention_scope'], int) and CONFIG['attention_scope'] not in g["node_types"]:
+            continue
         new_data.append(g)
 
     return new_data
@@ -87,7 +90,7 @@ def save_alignments(coefs, codes, outputs, references, path):
     data = {"src_labels": codes,
             "tgt_labels": outputs,
             "references": references,
-            "coefs": coefs}
+            "coefs": []}
     with open(path, "wb") as f:
         pickle.dump(data,f, pickle.HIGHEST_PROTOCOL)
 
@@ -125,7 +128,7 @@ def main():
                 input_vect = pickle.load(f)
 
             outputs, coefs = model.infer(test_data, alignment_history=True)
-            outputs = output_vect.devectorize(outputs, subtokens=False)
+            outputs = [output_vect.devectorize(output, subtokens=False) for output in outputs]
             codes = scope_labels(input_vect.devectorize([d["node_features"] for d in test_data], subtokens=True), [d["node_types"] for d in test_data], CONFIG['attention_scope'])
             references = output_vect.devectorize([g['output'] for g in test_data], subtokens=False)
 

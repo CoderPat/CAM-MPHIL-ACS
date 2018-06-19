@@ -67,7 +67,7 @@ def splitter(identifier, ordered=False):
 #Extracts function names
 def decl_tokenizer(decl):
     function_name = re.search('(?<=def )[\w_-]+(?=\(.*\):)', decl).group(0)
-    return splitter(function_name, ordered=True)
+    return splitter(function_name)
 
 
 def process_data(inputs, outputs, task_type, input_vectorizer, output_vectorizer):
@@ -107,7 +107,7 @@ def process_data(inputs, outputs, task_type, input_vectorizer, output_vectorizer
         node_counts = input_vectorizer.vectorize(node_labels)
 
     if output_vectorizer is None:
-        output_vectorizer = Vectorizer()
+        output_vectorizer = Vectorizer(minimum_frequency=1, min_sentence_freq=1)
         word_indices = output_vectorizer.build_and_vectorize(docs_words, subtokens=False)
     else:
         word_indices = output_vectorizer.vectorize(docs_words, subtokens=False)
@@ -152,14 +152,15 @@ if __name__ == "__main__":
     with open(code_data + "." + split) as f:
         inputs = [line for line in f.readlines()]
     with open(label_data + "." + split, 'rb') as f:
-        labels = [line.decode('utf-8') for line in f.readlines()]
+        labels = [line.decode('utf-8', 'ignore') for line in f.readlines()]
 
-    inputs = [inp.replace("DCNL ", "\n").replace("DCSP ", "\t") for inp in inputs]
-
+    inputs = [inp.replace("DCNL ", "\n").replace(" DCSP ", "\t").replace("DCSP ", "\t") for inp in inputs]
+    
     #Unident body so it can be parsed
     if task_type == 'body-name':
-        inputs = ["\n".join([line[(1 if idx else 2):] for idx,line in enumerate(inp.split("\n"))]) for inp in inputs]
+        inputs = ["\n".join([line[2 if not idx and line[1] == "\t" else 1:] for idx,line in enumerate(inp.split("\n"))]) for inp in inputs]
 
+    print(inputs[:10])
     if MOSES_TOKENIZER:
         labels = moses_tonenization(labels)
 

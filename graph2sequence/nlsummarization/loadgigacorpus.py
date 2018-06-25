@@ -18,8 +18,8 @@ from nltk.tree import Tree
 from graph2sequence.nlsummarization.graphtextrepr import (DependencyEdge,
                                                           GraphTextRepresentation,
                                                           Token)
-from graph2sequence.nlsummarization.textsummary import TextSummary
-from graph2sequence.nlsummarization.utils import load_xml_gz
+from graph2sequence.nlsummarization.textsummary import TextSummary, summary_to_json_string
+from graph2sequence.nlsummarization.utils import load_xml_gz, save_pickle_gz
 
 
 def parse_tree_to_sentence(parse_tree:str)-> List[str]:
@@ -109,12 +109,15 @@ def parse_gigacorpus_file(filename: str) -> Iterable[TextSummary]:
 
 def run(args):
     num_points = 0
+    data = []
+
     for textsum in parse_gigacorpus_file(args['FILEPATH']):
-        print(textsum.main_text.str_summary())
-        print('SUMMARY:' + ' '.join(textsum.summary_sentence))
-        print('=======================================')
+        data.append(textsum)
+        print(summary_to_json_string(textsum))
         num_points += 1
-    print('Loaded %s datapoints')
+    print('Loaded %s datapoints' % num_points)
+
+    save_pickle_gz(data, 'parsedSummary.pkl.gz')
 
 if __name__ == '__main__':
     args = docopt(__doc__)

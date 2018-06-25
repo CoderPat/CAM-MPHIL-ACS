@@ -37,6 +37,10 @@ class GraphTextRepresentation:
     def text(self)-> str:
         return ' '.join(' '.join(token.word for token in sentence) for sentence in self.__tokenized_text)
 
+    @property
+    def words(self) -> List[str]:
+        return list(chain(*((token.word for token in sentence) for sentence in self.__tokenized_text)))
+
     def add_dependency_edge(self, edge: DependencyEdge):
         assert 0 <= edge.sentence_idx < len(self.__tokenized_text)
         assert 0 <= edge.from_idx < len(self.__tokenized_text[edge.sentence_idx])
@@ -65,6 +69,62 @@ class GraphTextRepresentation:
             return underlying_entity or (sentence_idx, head_idx)
         assert not (from_sentence_idx == to_sentence_idx and from_head_idx == to_head_idx)
         self.__coreferences.append((get_coreference_location(from_sentence_idx, from_head_idx), get_coreference_location(to_sentence_idx, to_head_idx)))
+
+    def to_graph_object(self):
+        node_labels = [] #  type: List[str]
+        node_edges = []  # type: List[Tuple[str, int, int]]
+
+        def add_node(node_label: str)->int:
+            idx = len(node_labels)
+            node_labels.append(node_label)
+            return idx
+
+        word_node_location = defaultdict(dict)  # type: Dict[int, Dict[int, int]]  # sentence_idx -> idx -> node_id
+
+        for sentence_idx, sentence in enumerate(self.__tokenized_text):
+            for token_idx, token in enumerate(sentence):
+                node_idx = add_node(token.word)
+                word_node_location[sentence_idx][token_idx] = node_idx
+                if node_idx > 0:
+                    node_edges.append(('next', node_idx - 1, node_idx))
+
+        num_words = len(node_labels)
+
+        # Add sentence hypernodes
+        prev_sentence_node_idx = None
+        for sentence_idx, sentence in enumerate(self.__tokenized_text):
+            sentence_node_idx = add_node('Sentence')
+            if prev_sentence_node_idx is not None:
+                node_edges.append(('next', prev_sentence_node_idx, sentence_node_idx))
+
+            for token_idx, token in enumerate(sentence):
+                node_edges.append(('in', word_node_location[sentence_idx][token_idx], sentence_node_idx))
+            prev_sentence_node_idx = sentence_node_idx
+
+        # Add dependency edges
+        for dep_edge in self.__dependency_edges:
+            node_edges.append((dep_edge.dependency_type, word_node_location[dep_edge.sentence_idx][dep_edge.from_idx],
+                               word_node_location[dep_edge.sentence_idx][dep_edge.to_idx]))
+
+        # Add entities
+        entities_idx = {}  # type: Dict[Entity, int]
+        for sentence_idx, sentence_entities in self.__entities.items():
+            for entity in sentence_entities:
+                entity_idx = add_node('ENT:' + entity.entity_type)
+                entities_idx[entity] = entity_idx
+                for token_idx in range(entity.start_idx, entity.end_idx):
+                    node_edges.append(('in', word_node_location[entity.sentence_idx][token_idx], entity_idx))
+
+        # Add co-references
+        def get_node_id(mention: Union[Entity, Tuple[int, int]]):
+            if type(mention) is Entity:
+                return entities_idx[mention]
+            return word_node_location[mention[0]][mention[1]]
+        for mention_from, mention_to in self.__coreferences:
+            node_edges.append(('ref', get_node_id(mention_from), get_node_id(mention_to)))
+
+        return {'node_labels': node_labels, 'edges': node_edges,  'backbone_sequence': list(range(num_words))}
+
 
     def str_summary(self) -> str:
         with StringIO() as sb:

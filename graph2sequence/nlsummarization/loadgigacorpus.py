@@ -1,16 +1,20 @@
 #!/usr/bin/env python
 """
 Usage:
-    loadgigacorpus.py [options] FILEPATH
+    loadgigacorpus.py [options] INPUT_XML_FOLDER OUT_FILEPATH_PREFIX
 
 Options:
     -h --help                  Show this screen.
     --debug                    Enable debug routines. [default: False]
 """
+import codecs
+import gzip
+import json
+import os
 import pdb
 import sys
 import traceback
-from typing import Iterable, List, Optional
+from typing import Iterable, List, Optional, Tuple
 
 from docopt import docopt
 from nltk.tree import Tree
@@ -18,12 +22,21 @@ from nltk.tree import Tree
 from graph2sequence.nlsummarization.graphtextrepr import (DependencyEdge,
                                                           GraphTextRepresentation,
                                                           Token)
-from graph2sequence.nlsummarization.textsummary import TextSummary, summary_to_json_string
-from graph2sequence.nlsummarization.utils import load_xml_gz, save_pickle_gz
+from graph2sequence.nlsummarization.textsummary import TextSummary
+from graph2sequence.nlsummarization.utils import load_xml_gz
 
 
 def parse_tree_to_sentence(parse_tree:str)-> List[str]:
     return Tree.fromstring(parse_tree).leaves()
+
+def try_find_RB_span(tokens: List[str]) -> Optional[Tuple[int, int]]:
+    try:
+        lrb_idx = tokens.index('-LRB-')
+        rrb_idx = tokens.index('-RRB-')
+        return (lrb_idx, rrb_idx+1)
+    except ValueError:
+        return None
+
 
 def parse_sample(datapoint)-> Optional[TextSummary]:
     if datapoint.get('HEADLINE') is None or len(datapoint['HEADLINE']) == 0:
@@ -31,6 +44,12 @@ def parse_sample(datapoint)-> Optional[TextSummary]:
         return None
     try:
         headline_tokens = parse_tree_to_sentence(datapoint['HEADLINE'])
+        # Remove LRB-RRB chunks
+        rb_span = try_find_RB_span(headline_tokens)
+        while rb_span is not None:
+            headline_tokens = headline_tokens[:rb_span[0]] + headline_tokens[rb_span[1]:]
+            rb_span = try_find_RB_span(headline_tokens)
+
     except Exception as e:
         print('Could not parse %s. Ignoring sample.' % datapoint['HEADLINE'])
         return None
@@ -108,16 +127,26 @@ def parse_gigacorpus_file(filename: str) -> Iterable[TextSummary]:
             yield sample
 
 def run(args):
-    num_points = 0
-    data = []
+    with gzip.GzipFile(args['OUT_FILEPATH_PREFIX'] + '-inputs.jsonl.gz', 'wb') as text_input_file:
+        with  gzip.GzipFile(args['OUT_FILEPATH_PREFIX'] + '-summaries.jsonl.gz', 'wb') as summaries_file:
+            num_points = 0
+            writer = codecs.getwriter('utf-8')
+            for file in os.listdir(args['INPUT_XML_FOLDER']):
+                if not file.endswith('.xml.gz'): continue
+                full_file_path = os.path.join(args['INPUT_XML_FOLDER'], file)
+                print('Loading %s...' % full_file_path)
 
-    for textsum in parse_gigacorpus_file(args['FILEPATH']):
-        data.append(textsum)
-        print(summary_to_json_string(textsum))
-        num_points += 1
+                for textsum in parse_gigacorpus_file(full_file_path):
+                    if len(textsum.summary_sentence) <= 1:
+                        print('Single word headline: %s. Ignoring...' % textsum.summary_sentence)
+                        continue
+                    json.dump(textsum.main_text.to_graph_object(), writer(text_input_file))
+                    writer(text_input_file).write('\n')
+
+                    json.dump(textsum.summary_sentence, writer(summaries_file))
+                    writer(summaries_file).write('\n')
+                    num_points += 1
     print('Loaded %s datapoints' % num_points)
-
-    save_pickle_gz(data, 'parsedSummary.pkl.gz')
 
 if __name__ == '__main__':
     args = docopt(__doc__)

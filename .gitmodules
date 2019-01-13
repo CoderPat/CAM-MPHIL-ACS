@@ -1,0 +1,4 @@
+[submodule "data"]
+	path = examples/code2nlp/dataset/raw_data
+	url = https://github.com/EdinburghNLP/code-docstring-corpus
+	ignore = dirty
